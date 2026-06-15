@@ -74,6 +74,89 @@
   grid-template-columns: 1fr 1fr;
 }
 
+.riskPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sectionLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.riskInfo {
+  min-width: 0;
+}
+
+.riskMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.riskMeta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  color: var(--text2);
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  font-size: 12px;
+}
+
+.riskReason {
+  margin-top: 8px;
+  color: var(--text2);
+  font-size: 12px;
+}
+
+.riskError {
+  margin-top: 8px;
+  color: #ff9a8b;
+  font-size: 12px;
+}
+
+.riskButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 116px;
+  height: 34px;
+  border: 0;
+  border-radius: 7px;
+  color: #fff;
+  background: var(--teal);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.riskButton:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 760px) {
   .app {
     margin: 16px;
@@ -87,5 +170,14 @@
 
   .body {
     grid-template-columns: 1fr;
+  }
+
+  .riskPanel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .riskButton {
+    width: 100%;
   }
 }

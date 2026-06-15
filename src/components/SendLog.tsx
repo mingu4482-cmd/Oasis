@@ -9,7 +9,7 @@ interface Props {
 export default function SendLog({ logs }: Props) {
   return (
     <div className={styles.wrap}>
-      <p className={styles.sectionLabel}>발송 로그</p>
+      <p className={styles.sectionLabel}>전송 로그</p>
       <div className={styles.list}>
         {logs.map((log) => {
           const stage = STAGES.find((s) => s.key === log.stage);

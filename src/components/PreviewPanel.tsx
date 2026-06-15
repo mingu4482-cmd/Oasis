@@ -38,7 +38,7 @@ export default function PreviewPanel({ preview, stage, onSend }: Props) {
       </div>
       <pre className={styles.preview}>{preview}</pre>
 
-      <p className={styles.sectionLabel} style={{ marginTop: 8 }}>발송 채널</p>
+      <p className={styles.sectionLabel} style={{ marginTop: 8 }}>전송 채널</p>
       <div className={styles.channels}>
         <button
           className={`${styles.ch} ${sms ? styles.chActive : ''}`}
@@ -68,7 +68,7 @@ export default function PreviewPanel({ preview, stage, onSend }: Props) {
         disabled={!sms && !slack}
       >
         <Send size={14} />
-        {sent ? '발송 완료' : '발송'}
+        {sent ? '전송 완료' : '전송'}
       </button>
     </div>
   );
