@@ -1,0 +1,36 @@
+{
+  "name": "oasis-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "api": "node server/index.js",
+    "dev": "vite --host 0.0.0.0",
+    "dev:all": "start \"OASIS API\" npm.cmd run api && npm.cmd run dev",
+    "build": "tsc --noEmit && vite build --config vite.config.ts",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.81.2",
+    "axios": "^1.10.0",
+    "cesium": "^1.131.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "firebase": "^11.9.1",
+    "lucide-react": "^0.468.0",
+    "pg": "^8.21.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.1",
+    "recharts": "^2.15.4",
+    "socket.io-client": "^4.8.1",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.5.2",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.19"
+  }
+}
