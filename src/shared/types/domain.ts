@@ -47,3 +47,18 @@ export interface MapLayer {
   refresh: string;
   enabled: boolean;
 }
+
+export type UserRole = 'ADMIN' | 'USER';
+
+export interface RegisteredUser {
+  id?: string;
+  role: UserRole;
+  name: string;
+  email: string;
+  phone: string;
+  organization: string;
+  department: string;
+  address: string;
+  emergencyContact: string;
+  memo: string;
+}
