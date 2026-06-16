@@ -29,6 +29,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
 .app-shell {
   min-height: 100vh;
   background: #f4f7f6;
@@ -116,6 +121,49 @@ button {
   border-radius: 8px;
   font-size: 13px;
   font-weight: 800;
+}
+
+.role-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 66px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #cdd8d5;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #40514d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auth-link,
+.command-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #cdd8d5;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #26423d;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.auth-link.primary {
+  border-color: #0f766e;
+  background: #0f766e;
+  color: #ffffff;
 }
 
 .alert-normal {
@@ -536,6 +584,120 @@ button {
   font-weight: 800;
 }
 
+.command-button.secondary {
+  border: 1px solid #cdd8d5;
+  background: #ffffff;
+  color: #26423d;
+}
+
+.signup-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.78fr) minmax(0, 1.22fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.signup-hero {
+  position: sticky;
+  top: 82px;
+  min-height: calc(100vh - 100px);
+  padding: 28px;
+  border: 1px solid #c9d8d5;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(15, 118, 110, 0.18), transparent 42%),
+    linear-gradient(180deg, #eef6f4, #ffffff);
+}
+
+.signup-hero h1 {
+  max-width: 520px;
+  margin: 0 0 12px;
+  color: #13201d;
+  font-size: 34px;
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+
+.signup-hero p {
+  max-width: 520px;
+  margin: 0;
+  color: #52615d;
+  line-height: 1.65;
+}
+
+.signup-form {
+  display: grid;
+  gap: 18px;
+}
+
+.role-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.role-card {
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  padding: 16px;
+  border: 1px solid #dbe3e1;
+  border-radius: 8px;
+  background: #fbfdfc;
+  color: #26423d;
+  text-align: left;
+}
+
+.role-card strong {
+  color: #162522;
+  font-size: 16px;
+}
+
+.role-card span {
+  color: #66736f;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.role-card.active {
+  border-color: #0f766e;
+  background: #e0f2f1;
+  color: #0f766e;
+}
+
+.form-section-title {
+  color: #162522;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.form-error {
+  padding: 11px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.signup-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-page {
+  display: grid;
+  place-items: center;
+  min-height: calc(100vh - 100px);
+}
+
+.auth-panel {
+  width: min(100%, 430px);
+}
+
 .layer-panel {
   min-height: 520px;
 }
@@ -638,6 +800,30 @@ select {
   padding: 0 11px;
 }
 
+input.input-valid {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+input.input-invalid {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.field-hint {
+  color: #60706c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.field-hint.valid {
+  color: #0f766e;
+}
+
+.field-hint.invalid {
+  color: #dc2626;
+}
+
 textarea {
   min-height: 128px;
   padding: 11px;
@@ -737,8 +923,14 @@ textarea {
   }
 
   .main-grid,
-  .two-column {
+  .two-column,
+  .signup-layout {
     grid-template-columns: 1fr;
+  }
+
+  .signup-hero {
+    position: static;
+    min-height: auto;
   }
 }
 
@@ -778,8 +970,21 @@ textarea {
   .overview-strip,
   .metric-grid,
   .report-grid,
-  .form-grid {
+  .form-grid,
+  .role-selector {
     grid-template-columns: 1fr;
+  }
+
+  .signup-hero {
+    padding: 20px;
+  }
+
+  .signup-hero h1 {
+    font-size: 28px;
+  }
+
+  .signup-actions {
+    flex-direction: column-reverse;
   }
 
   .map-surface,
