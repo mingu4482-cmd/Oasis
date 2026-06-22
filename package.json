@@ -1,45 +1,38 @@
 {
-  "name": "oasis-alert",
-  "version": "0.1.0",
+  "name": "oasis-frontend",
+  "version": "1.0.0",
   "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build --config vite.config.ts",
+    "preview": "vite preview --host 0.0.0.0"
+  },
   "dependencies": {
-    "@testing-library/dom": "^10.4.1",
+    "@tanstack/react-query": "^5.81.2",
+    "axios": "^1.10.0",
+    "cesium": "^1.131.0",
+    "firebase": "^11.9.1",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-kakao-maps-sdk": "^1.2.1",
+    "react-router-dom": "^6.30.1",
+    "recharts": "^2.15.4",
+    "socket.io-client": "^4.8.1",
+    "web-vitals": "^2.1.4",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^13.5.0",
-    "@types/jest": "^27.5.2",
-    "@types/node": "^16.18.126",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "lucide-react": "^1.18.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "react-scripts": "5.0.1",
-    "typescript": "^4.9.5",
-    "web-vitals": "^2.1.4"
-  },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.5.2",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.19",
+    "vite-plugin-cesium": "^1.2.23"
   }
 }
