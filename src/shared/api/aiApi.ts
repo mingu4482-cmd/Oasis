@@ -1,0 +1,137 @@
+import { apiClient } from './client';
+import { PredictionResult } from '../types/domain';
+
+export interface RiskPredictionPayload {
+  current_level: number;
+  level_velocity: number;
+  current_rainfall: number;
+  forecast_rainfall: number;
+}
+
+export type RiskLabel = 'SAFE' | 'CAUTION' | 'WARNING' | 'DANGER';
+
+export interface RiskPredictionResponse {
+  riskLevel: number;
+  riskLabel: RiskLabel;
+  riskScore?: number;
+}
+
+export async function fetchRiskPrediction(payload: RiskPredictionPayload) {
+  const response = await apiClient.post<RiskPredictionResponse>('/predict-risk', payload);
+  return response.data;
+}
+
+export type RiskForecastResponse =
+  | (PredictionResult & {
+      hasData: true;
+      timestamp?: string;
+      source?: string;
+      targetAreaName?: string;
+      region?: string;
+      riskScore?: number;
+      riskLabel?: RiskLabel;
+    })
+  | { hasData: false; message: string; source: string; timestamp: null; points?: [] };
+
+export async function fetchRiskForecast(region?: string) {
+  const response = await apiClient.get<RiskForecastResponse>('/risk-forecast', {
+    params: region ? { region } : undefined,
+  });
+  return response.data;
+}
+
+export interface SimulationRiskRequest {
+  rainfall: number;
+  waterLevel: number;
+  drainageLevel: number;
+  waterLevelRiseRate: number;
+  forecastRainfall1h: number;
+  forecastRainfall2h: number;
+  forecastRainfall3h: number;
+}
+
+export interface SimulationRiskPoint {
+  time: string;
+  risk: number;
+  rainfall: number;
+  riskLabel: RiskLabel;
+}
+
+export interface SimulationRiskResponse {
+  modelVersion: string;
+  confidence: number;
+  riskScore: number;
+  riskLabel: RiskLabel;
+  reasons: string[];
+  points: SimulationRiskPoint[];
+  timestamp: string;
+}
+
+export interface LiveStatusResponse {
+  hasData: boolean;
+  targetAreaName?: string;
+  rainfall?: number;
+  waterLevel?: number;
+  drainageLevel?: number;
+  waterLevelRiseRate?: number;
+  forecastRainfall1h?: number;
+  forecastRainfall2h?: number;
+  forecastRainfall3h?: number;
+  riskScore?: number;
+  riskLabel?: RiskLabel;
+  confidence?: number;
+  points?: SimulationRiskPoint[];
+  source?: string;
+  timestamp?: string;
+  rainfallStation?: string;
+  rainfallObservedAt?: string;
+  drainpipeStation?: string;
+  drainpipeMeasuredAt?: string;
+  drainpipePosition?: string;
+  rawWaterLevel?: number | null;
+  forecastGrid?: { nx: number; ny: number };
+  fallbackReason?: string | null;
+  warnings?: string[];
+  current_level?: number;
+  level_velocity?: number;
+  current_rainfall?: number;
+  forecast_rainfall?: number;
+}
+
+export interface RegionsResponse {
+  hasData: boolean;
+  defaultRegion: string;
+  regions: string[];
+  timestamp: string | null;
+}
+
+export interface RegionalStatusResponse {
+  hasData: boolean;
+  mode: 'regional';
+  defaultRegion: string;
+  regions: string[];
+  regionStatusMap: Record<string, LiveStatusResponse>;
+  timestamp: string | null;
+}
+
+export async function fetchRegions() {
+  const response = await apiClient.get<RegionsResponse>('/regions');
+  return response.data;
+}
+
+export async function fetchRegionalStatus() {
+  const response = await apiClient.get<RegionalStatusResponse>('/regional-status');
+  return response.data;
+}
+
+export async function fetchLiveStatus(region?: string) {
+  const response = await apiClient.get<LiveStatusResponse>('/live-status', {
+    params: region ? { region } : undefined,
+  });
+  return response.data;
+}
+
+export async function simulateRisk(payload: SimulationRiskRequest): Promise<SimulationRiskResponse> {
+  const response = await apiClient.post<SimulationRiskResponse>('/simulate-risk', payload);
+  return response.data;
+}
