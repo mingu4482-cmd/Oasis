@@ -1,4 +1,5 @@
 import {
+  Activity,
   AlertTriangle,
   Bell,
   FileText,
@@ -25,6 +26,7 @@ const navItems: Array<{ to: string; label: string; icon: typeof Home; roles: Arr
   { to: '/dashboard', label: '홈', icon: Home, roles: ['GUEST', 'USER', 'ADMIN'] },
   { to: '/map', label: '통합 지도', icon: Map, roles: ['GUEST', 'USER', 'ADMIN'] },
   { to: '/digital-twin', label: '디지털 트윈', icon: Satellite, roles: ['ADMIN'] },
+  { to: '/risk-analysis', label: 'AI 위험도 분석', icon: Activity, roles: ['GUEST', 'USER', 'ADMIN'] },
   { to: '/alerts', label: '경보 관리', icon: Bell, roles: ['ADMIN'] },
   { to: '/reports', label: '보고서', icon: FileText, roles: ['ADMIN'] },
   { to: '/safe-route', label: '안전 경로', icon: Route, roles: ['GUEST', 'USER', 'ADMIN'] },
