@@ -2,6 +2,7 @@ import { DashboardState, MapLayer } from '../../shared/types/domain';
 
 export const mockDashboard: DashboardState = {
   alertLevel: 'WARNING',
+  selectedRegion: '강남구',
   mapCenter: { lat: 37.5665, lng: 126.978 },
   sensorSummary: {
     total: 164,
@@ -42,6 +43,7 @@ export const mockDashboard: DashboardState = {
       { time: '+3h', risk: 68, rainfall: 22 },
     ],
   },
+  simulationPrediction: null,
 };
 
 export const mapLayers: MapLayer[] = [

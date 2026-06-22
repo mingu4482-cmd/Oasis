@@ -1,4 +1,5 @@
 import express from 'express';
+import axios from 'axios';
 import { Pool } from 'pg';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import dotenv from 'dotenv';
@@ -8,6 +9,7 @@ dotenv.config();
 
 const app = express();
 const port = Number(process.env.API_PORT ?? 4000);
+const aiServerUrl = process.env.AI_SERVER_URL ?? 'http://localhost:8000';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -15,6 +17,67 @@ const pool = new Pool({
 });
 
 app.use(express.json());
+
+let latestLiveStatus = null;
+let latestRiskForecast = null;
+let latestRegionalStatus = null;
+
+function getDefaultRegion() {
+  return latestRegionalStatus?.defaultRegion ?? latestRegionalStatus?.regions?.[0] ?? null;
+}
+
+function getRegionalStatus(region) {
+  if (!latestRegionalStatus?.regionStatusMap) {
+    return null;
+  }
+
+  const defaultRegion = getDefaultRegion();
+  const selectedRegion = region || defaultRegion;
+  return latestRegionalStatus.regionStatusMap[selectedRegion] ?? latestRegionalStatus.regionStatusMap[defaultRegion] ?? null;
+}
+
+function toLiveStatus(payload) {
+  return {
+    hasData: true,
+    targetAreaName: payload.targetAreaName,
+    rainfall: payload.rainfall,
+    waterLevel: payload.waterLevel,
+    drainageLevel: payload.drainageLevel,
+    waterLevelRiseRate: payload.waterLevelRiseRate,
+    forecastRainfall1h: payload.forecastRainfall1h,
+    forecastRainfall2h: payload.forecastRainfall2h,
+    forecastRainfall3h: payload.forecastRainfall3h,
+    riskScore: payload.riskScore,
+    riskLabel: payload.riskLabel,
+    confidence: payload.confidence,
+    source: payload.source ?? payload.dataSource ?? 'realtime api',
+    timestamp: payload.timestamp ?? new Date().toISOString(),
+    rainfallStation: payload.rainfallStation,
+    rainfallObservedAt: payload.rainfallObservedAt,
+    drainpipeStation: payload.drainpipeStation,
+    drainpipeMeasuredAt: payload.drainpipeMeasuredAt,
+    drainpipePosition: payload.drainpipePosition,
+    rawWaterLevel: payload.rawWaterLevel,
+    forecastGrid: payload.forecastGrid,
+    fallbackReason: payload.fallbackReason,
+    warnings: payload.warnings ?? [],
+  };
+}
+
+function toRiskForecast(payload) {
+  return {
+    hasData: true,
+    region: payload.targetAreaName,
+    riskScore: payload.riskScore,
+    riskLabel: payload.riskLabel,
+    modelVersion: payload.modelVersion ?? 'OASIS-FloodNet v1.0',
+    confidence: payload.confidence ?? 0,
+    points: payload.points ?? [],
+    source: payload.source ?? payload.dataSource ?? 'realtime api',
+    timestamp: payload.timestamp ?? new Date().toISOString(),
+    targetAreaName: payload.targetAreaName,
+  };
+}
 
 function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
@@ -203,6 +266,200 @@ app.post('/api/auth/login', async (request, response) => {
 
 app.post('/api/auth/logout', (_request, response) => {
   response.json({ ok: true });
+});
+
+app.post('/api/predict-risk', async (request, response) => {
+  try {
+    const aiResponse = await axios.post(`${aiServerUrl}/predict`, request.body, {
+      timeout: 5000,
+    });
+
+    response.json(aiResponse.data);
+  } catch (predictError) {
+    console.error('Failed to request AI risk prediction');
+
+    if (predictError.response) {
+      console.error(predictError.response.data);
+    } else {
+      console.error(predictError.message);
+    }
+
+    response.status(500).json({
+      message: 'Failed to communicate with the AI risk prediction server.',
+    });
+  }
+});
+
+app.post('/api/simulate-risk', async (request, response) => {
+  try {
+    const aiResponse = await axios.post(`${aiServerUrl}/simulate`, request.body, {
+      timeout: 7000,
+    });
+
+    response.json(aiResponse.data);
+  } catch (simulateError) {
+    console.error('Failed to request AI risk simulation');
+
+    if (simulateError.response) {
+      console.error(simulateError.response.data);
+      response.status(simulateError.response.status).json({
+        message: 'AI simulation request failed.',
+        detail: simulateError.response.data,
+      });
+      return;
+    }
+
+    console.error(simulateError.message);
+    response.status(502).json({
+      message: 'Failed to communicate with the AI simulation server.',
+    });
+  }
+});
+
+app.post('/api/update-live-status', (request, response) => {
+  try {
+    const payload = request.body;
+
+    if (payload.mode === 'regional' && payload.regionStatusMap) {
+      latestRegionalStatus = {
+        hasData: true,
+        mode: 'regional',
+        defaultRegion: payload.defaultRegion,
+        regions: payload.regions ?? Object.keys(payload.regionStatusMap),
+        regionStatusMap: payload.regionStatusMap,
+        timestamp: payload.timestamp ?? new Date().toISOString(),
+      };
+
+      const defaultStatus = getRegionalStatus(payload.defaultRegion);
+      if (defaultStatus) {
+        latestLiveStatus = toLiveStatus(defaultStatus);
+        latestRiskForecast = toRiskForecast(defaultStatus);
+      }
+
+      console.log('Regional live status updated from AI scheduler:', {
+        defaultRegion: latestRegionalStatus.defaultRegion,
+        regions: latestRegionalStatus.regions,
+      });
+      response.json({ ok: true, mode: 'regional' });
+      return;
+    }
+
+    latestLiveStatus = toLiveStatus(payload);
+    latestRiskForecast = toRiskForecast(payload);
+    console.log('Live status updated from AI scheduler:', latestLiveStatus);
+    response.json({ ok: true });
+  } catch (error) {
+    console.error('Failed to update live status');
+    console.error(error);
+    response.status(500).json({ message: 'Failed to update live status' });
+  }
+});
+
+app.get('/api/regions', (_request, response) => {
+  if (latestRegionalStatus) {
+    response.json({
+      hasData: true,
+      defaultRegion: latestRegionalStatus.defaultRegion,
+      regions: latestRegionalStatus.regions,
+      timestamp: latestRegionalStatus.timestamp,
+    });
+    return;
+  }
+
+  response.json({
+    hasData: false,
+    defaultRegion: '강남구',
+    regions: ['강남구', '서초구', '관악구', '동작구', '영등포구', '구로구', '양천구', '마포구', '성동구', '광진구'],
+    timestamp: null,
+  });
+});
+
+app.get('/api/regional-status', (_request, response) => {
+  if (latestRegionalStatus?.regionStatusMap) {
+    response.json(latestRegionalStatus);
+    return;
+  }
+
+  response.json({
+    hasData: false,
+    mode: 'regional',
+    defaultRegion: '강남구',
+    regions: [],
+    regionStatusMap: {},
+    timestamp: null,
+  });
+});
+
+app.get('/api/live-status', (request, response, next) => {
+  const region = request.query.region?.toString();
+  const regionalStatus = getRegionalStatus(region);
+
+  if (regionalStatus) {
+    response.json(toLiveStatus(regionalStatus));
+    return;
+  }
+
+  if (!region) {
+    next();
+    return;
+  }
+
+  response.json({
+    hasData: false,
+    message: '아직 수집된 실시간 데이터가 없습니다.',
+    source: 'realtime api waiting',
+    timestamp: null,
+  });
+});
+
+app.get('/api/risk-forecast', (request, response, next) => {
+  const region = request.query.region?.toString();
+  const regionalStatus = getRegionalStatus(region);
+
+  if (regionalStatus) {
+    response.json(toRiskForecast(regionalStatus));
+    return;
+  }
+
+  if (!region) {
+    next();
+    return;
+  }
+
+  response.json({
+    hasData: false,
+    message: 'No risk forecast data available',
+    source: 'realtime api waiting',
+    timestamp: null,
+    points: [],
+  });
+});
+
+app.get('/api/live-status', (_request, response) => {
+  if (latestLiveStatus) {
+    response.json(latestLiveStatus);
+  } else {
+    response.json({
+      hasData: false,
+      message: '아직 수집된 실시간 데이터가 없습니다.',
+      source: 'realtime api waiting',
+      timestamp: null,
+    });
+  }
+});
+
+app.get('/api/risk-forecast', (_request, response) => {
+  if (latestRiskForecast) {
+    response.json(latestRiskForecast);
+  } else {
+    response.json({
+      hasData: false,
+      message: 'No risk forecast data available',
+      source: 'realtime api waiting',
+      timestamp: null,
+      points: [],
+    });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────

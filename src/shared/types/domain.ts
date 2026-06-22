@@ -15,6 +15,19 @@ export interface User {
   department?: string;
 }
 
+export interface RegisteredUser {
+  id?: string;
+  role: UserRole;
+  name: string;
+  email: string;
+  phone: string;
+  organization: string;
+  department: string;
+  address: string;
+  emergencyContact: string;
+  memo: string;
+}
+
 // ─── 대시보드 ─────────────────────────────────────────────────────────────────
 
 export interface Incident {
@@ -36,13 +49,20 @@ export interface PredictionPoint {
   time: string;
   risk: number;
   rainfall: number;
+  riskLabel?: string;
 }
 
 export interface AiPrediction {
   modelVersion: string;
   confidence: number;
   points: PredictionPoint[];
+  dataSource?: string;
+  source?: string;
+  timestamp?: string;
+  fallbackUsed?: boolean;
 }
+
+export type PredictionResult = AiPrediction;
 
 export interface MapCenter {
   lat: number;
@@ -55,6 +75,8 @@ export interface DashboardState {
   sensorSummary: SensorSummary;
   activeIncidents: Incident[];
   aiPrediction: AiPrediction;
+  simulationPrediction: PredictionResult | null;
+  selectedRegion: string;
 }
 
 // ─── 지도 레이어 ──────────────────────────────────────────────────────────────
