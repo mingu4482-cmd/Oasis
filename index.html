@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OASIS</title>
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=<%= VITE_KAKAO_MAP_KEY %>&libraries=services&autoload=false"></script>
+    <script>
+      window.addEventListener('DOMContentLoaded', function () {
+        kakao.maps.load(function () {
+          window.__kakaoReady = true;
+        });
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

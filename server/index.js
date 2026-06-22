@@ -18,7 +18,6 @@ const pool = new Pool({
 
 app.use(express.json());
 
-// 실시간 라이브 데이터 저장 (파이썬 스케줄러에서 업데이트됨)
 let latestLiveStatus = null;
 let latestRiskForecast = null;
 let latestRegionalStatus = null;
@@ -291,7 +290,6 @@ app.post('/api/predict-risk', async (request, response) => {
   }
 });
 
-// 파이썬 스케줄러에서 실시간 데이터 업데이트
 app.post('/api/simulate-risk', async (request, response) => {
   try {
     const aiResponse = await axios.post(`${aiServerUrl}/simulate`, request.body, {
@@ -357,7 +355,6 @@ app.post('/api/update-live-status', (request, response) => {
   }
 });
 
-// 프론트엔드에서 최신 실시간 데이터 조회
 app.get('/api/regions', (_request, response) => {
   if (latestRegionalStatus) {
     response.json({
@@ -438,7 +435,7 @@ app.get('/api/risk-forecast', (request, response, next) => {
   });
 });
 
-app.get('/api/live-status', (request, response) => {
+app.get('/api/live-status', (_request, response) => {
   if (latestLiveStatus) {
     response.json(latestLiveStatus);
   } else {
@@ -451,7 +448,7 @@ app.get('/api/live-status', (request, response) => {
   }
 });
 
-app.get('/api/risk-forecast', (request, response) => {
+app.get('/api/risk-forecast', (_request, response) => {
   if (latestRiskForecast) {
     response.json(latestRiskForecast);
   } else {
@@ -465,12 +462,214 @@ app.get('/api/risk-forecast', (request, response) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// 안전 경로 — 카카오 길찾기 (자동차 / 도보)
+// ─────────────────────────────────────────────────────────────────────────
+
+const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;
+const TMAP_APP_KEY = process.env.TMAP_APP_KEY;
+
+function validateRouteQuery(query) {
+  const { originLat, originLng, destLat, destLng } = query;
+  if (!originLat || !originLng || !destLat || !destLng) {
+    return '출발지(originLat, originLng)와 목적지(destLat, destLng) 좌표가 필요합니다.';
+  }
+  return null;
+}
+
+// 자동차 길찾기 — 카카오모빌리티 Directions API
+app.get('/api/route/car', async (request, response) => {
+  const error = validateRouteQuery(request.query);
+  if (error) {
+    response.status(400).json({ message: error });
+    return;
+  }
+
+  if (!KAKAO_REST_API_KEY) {
+    response.status(500).json({ message: 'KAKAO_REST_API_KEY가 서버에 설정되지 않았습니다.' });
+    return;
+  }
+
+  const { originLat, originLng, destLat, destLng } = request.query;
+
+  try {
+    const url = new URL('https://apis-navi.kakaomobility.com/v1/directions');
+    url.searchParams.set('origin', `${originLng},${originLat}`);
+    url.searchParams.set('destination', `${destLng},${destLat}`);
+    url.searchParams.set('priority', 'RECOMMEND');
+
+    const kakaoResponse = await fetch(url, {
+      headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` },
+    });
+
+    const data = await kakaoResponse.json();
+
+    if (!kakaoResponse.ok) {
+      console.error('[kakao directions]', data);
+      response.status(kakaoResponse.status).json({ message: '자동차 경로 조회에 실패했습니다.', detail: data });
+      return;
+    }
+
+    const route = data.routes?.[0];
+    if (!route || route.result_code !== 0) {
+      response.status(404).json({ message: '경로를 찾을 수 없습니다.' });
+      return;
+    }
+
+    // 모든 section의 모든 road를 이어붙여 좌표 배열로 변환
+    const path = [];
+    for (const section of route.sections ?? []) {
+      for (const road of section.roads ?? []) {
+        const vertexes = road.vertexes ?? [];
+        for (let i = 0; i < vertexes.length; i += 2) {
+          path.push({ lng: vertexes[i], lat: vertexes[i + 1] });
+        }
+      }
+    }
+
+    const steps = [];
+    for (const section of route.sections ?? []) {
+      for (const guide of section.guides ?? []) {
+        if (!guide.guidance) continue;
+        steps.push({
+          guidance: guide.guidance,
+          name: guide.name ?? '',
+          distanceM: guide.distance ?? 0,
+          type: guide.type ?? 0,
+          lat: guide.y,
+          lng: guide.x,
+        });
+      }
+    }
+
+    response.json({
+      mode: 'CAR',
+      distanceM: route.summary.distance,
+      durationSec: route.summary.duration,
+      path,
+      steps,
+    });
+  } catch (fetchError) {
+    console.error(fetchError);
+    response.status(500).json({ message: '자동차 경로 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+// 도보 길찾기 — T맵 보행자 경로 API
+app.get('/api/route/walk', async (request, response) => {
+  const error = validateRouteQuery(request.query);
+  if (error) {
+    response.status(400).json({ message: error });
+    return;
+  }
+
+  const { originLat, originLng, destLat, destLng } = request.query;
+
+  // T맵 키 없으면 직선거리 fallback
+  if (!TMAP_APP_KEY) {
+    const distanceM = haversineMeters(Number(originLat), Number(originLng), Number(destLat), Number(destLng));
+    const durationSec = Math.round((distanceM / 1000 / 4) * 3600);
+    response.json({
+      mode: 'WALK',
+      distanceM: Math.round(distanceM),
+      durationSec,
+      path: [
+        { lat: Number(originLat), lng: Number(originLng) },
+        { lat: Number(destLat), lng: Number(destLng) },
+      ],
+      steps: [],
+    });
+    return;
+  }
+
+  try {
+    const tmapRes = await fetch(`https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1&appKey=${encodeURIComponent(TMAP_APP_KEY)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        appKey: TMAP_APP_KEY,
+      },
+      body: JSON.stringify({
+        startX: String(originLng),
+        startY: String(originLat),
+        endX: String(destLng),
+        endY: String(destLat),
+        reqCoordType: 'WGS84GEO',
+        resCoordType: 'WGS84GEO',
+        startName: '출발지',
+        endName: '도착지',
+      }),
+    });
+
+    const data = await tmapRes.json();
+
+    if (!tmapRes.ok) {
+      console.error('[tmap walk] 상태:', tmapRes.status, JSON.stringify(data));
+      response.status(tmapRes.status).json({ message: `도보 경로 조회 실패 (${tmapRes.status}): ${data?.error?.message ?? JSON.stringify(data)}` });
+      return;
+    }
+
+    const path = [];
+    const steps = [];
+    let totalDistanceM = 0;
+    let totalDurationSec = 0;
+
+    for (const feature of data.features ?? []) {
+      const { geometry, properties } = feature;
+
+      if (properties.totalDistance !== undefined) {
+        totalDistanceM = properties.totalDistance;
+        totalDurationSec = properties.totalTime; // 초 단위
+      }
+
+      if (geometry.type === 'LineString') {
+        for (const coord of geometry.coordinates) {
+          path.push({ lng: coord[0], lat: coord[1] });
+        }
+      }
+
+      if (geometry.type === 'Point' && properties.description) {
+        steps.push({
+          guidance: properties.description,
+          name: properties.streetName ?? '',
+          distanceM: properties.distance ?? 0,
+          type: properties.turnType ?? 0,
+          lat: geometry.coordinates[1],
+          lng: geometry.coordinates[0],
+        });
+      }
+    }
+
+    response.json({
+      mode: 'WALK',
+      distanceM: Math.round(totalDistanceM),
+      durationSec: totalDurationSec,
+      path,
+      steps,
+    });
+  } catch (fetchError) {
+    console.error(fetchError);
+    response.status(500).json({ message: '도보 경로 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// DB 연결 실패해도 서버는 켜지도록 분리
+// (길찾기 등 DB 무관 라우트는 항상 동작해야 함)
 app.listen(port, () => {
   console.log(`OASIS API listening on http://127.0.0.1:${port}`);
 });
 
 ensureUsersTable().catch((error) => {
-  console.error('Failed to initialize database connection');
-  console.error(error);
-  console.error('OASIS API will keep running, but auth/database features may fail until DATABASE_URL is fixed.');
+  console.error('⚠️  DB 연결 실패 — 로그인/회원가입 기능은 동작하지 않습니다.');
+  console.error(error.message);
 });
