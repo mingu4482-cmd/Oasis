@@ -1,14 +1,14 @@
 import { LocateFixed, Navigation } from 'lucide-react';
+import { AppShell } from '../../shared/components/AppShell';
+import { ShelterMapPanel } from '../../features/safe-route/ShelterMapPanel';
+import { ShelterList } from '../../features/safe-route/ShelterList';
+import { useSafeRouteStore } from '../../features/safe-route/safeRouteStore';
 
 function formatDuration(sec: number) {
   const min = Math.round(sec / 60);
   if (min < 60) return `${min}분`;
   return `${Math.floor(min / 60)}시간 ${min % 60}분`;
 }
-import { AppShell } from '../../shared/components/AppShell';
-import { ShelterMapPanel } from '../../features/safe-route/ShelterMapPanel';
-import { ShelterList } from '../../features/safe-route/ShelterList';
-import { useSafeRouteStore } from '../../features/safe-route/safeRouteStore';
 
 export function SafeRoutePage() {
   const activeRoute = useSafeRouteStore((s) => s.activeRoute);
@@ -20,10 +20,8 @@ export function SafeRoutePage() {
   return (
     <AppShell>
       <div className="page-layout two-column">
-        {/* 왼쪽: 지도 (기존 route-map 구조 유지 + 대피소 마커 추가) */}
         <ShelterMapPanel />
 
-        {/* 오른쪽: 기존 패널 구조 유지 + 대피소 목록 */}
         <section className="panel">
           <div className="panel-heading">
             <div>
@@ -33,7 +31,6 @@ export function SafeRoutePage() {
             <Navigation size={20} aria-hidden="true" />
           </div>
 
-          {/* 경로 요약 — 선택된 대피소 or 기본값 표시 */}
           <div className="route-summary">
             <div>
               <LocateFixed size={18} aria-hidden="true" />
@@ -55,7 +52,6 @@ export function SafeRoutePage() {
             </div>
           </div>
 
-          {/* 대피소 목록 */}
           <ShelterList />
         </section>
       </div>

@@ -47,6 +47,7 @@ export function ShelterList() {
   const travelMode = useSafeRouteStore((s) => s.travelMode);
   const isNavigating = useSafeRouteStore((s) => s.isNavigating);
   const currentStepIndex = useSafeRouteStore((s) => s.currentStepIndex);
+  const autoSelectedId = useSafeRouteStore((s) => s.autoSelectedId);
   const selectShelter = useSafeRouteStore((s) => s.selectShelter);
   const requestRoute = useSafeRouteStore((s) => s.requestRoute);
   const setTravelMode = useSafeRouteStore((s) => s.setTravelMode);
@@ -66,8 +67,16 @@ export function ShelterList() {
   const isArrived = isNavigating && steps.length > 0 && currentStepIndex >= steps.length - 1;
   const progress = steps.length > 0 ? Math.round(((currentStepIndex + 1) / steps.length) * 100) : 0;
 
+  const autoSelectedShelter = autoSelectedId ? shelters.find((s) => s.id === autoSelectedId) : null;
+
   return (
     <div className="shelter-list">
+      {autoSelectedShelter && (
+        <div className="auto-select-banner">
+          <LocateFixed size={14} aria-hidden="true" />
+          <span>가장 가까운 운영 중 대피소 <strong>{autoSelectedShelter.name}</strong>을 자동으로 선택했습니다.</span>
+        </div>
+      )}
       {shelters.map((shelter) => {
         const isSelected = shelter.id === selectedId;
         const rate = occupancyRate(shelter);

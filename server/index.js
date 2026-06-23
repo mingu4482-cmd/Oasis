@@ -592,7 +592,7 @@ app.get('/api/route/car', async (request, response) => {
   }
 });
 
-// 도보 길찾기 — T맵 보행자 경로 API
+// 도보 길찾기 — T맵 보행자 → 실패 시 OSRM fallback
 app.get('/api/route/walk', async (request, response) => {
   const error = validateRouteQuery(request.query);
   if (error) {
@@ -601,91 +601,96 @@ app.get('/api/route/walk', async (request, response) => {
   }
 
   const { originLat, originLng, destLat, destLng } = request.query;
+  const oLat = Number(originLat), oLng = Number(originLng);
+  const dLat = Number(destLat),   dLng = Number(destLng);
 
-  // T맵 키 없으면 직선거리 fallback
-  if (!TMAP_APP_KEY) {
-    const distanceM = haversineMeters(Number(originLat), Number(originLng), Number(destLat), Number(destLng));
-    const durationSec = Math.round((distanceM / 1000 / 4) * 3600);
-    response.json({
-      mode: 'WALK',
-      distanceM: Math.round(distanceM),
-      durationSec,
-      path: [
-        { lat: Number(originLat), lng: Number(originLng) },
-        { lat: Number(destLat), lng: Number(destLng) },
-      ],
-      steps: [],
-    });
-    return;
+  // T맵 키가 있으면 먼저 시도
+  if (TMAP_APP_KEY) {
+    try {
+      const tmapRes = await fetch(
+        `https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1&appKey=${encodeURIComponent(TMAP_APP_KEY)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', appKey: TMAP_APP_KEY },
+          body: JSON.stringify({
+            startX: String(oLng), startY: String(oLat),
+            endX: String(dLng),   endY: String(dLat),
+            reqCoordType: 'WGS84GEO', resCoordType: 'WGS84GEO',
+            startName: '출발지', endName: '도착지',
+          }),
+        },
+      );
+
+      if (tmapRes.ok) {
+        const data = await tmapRes.json();
+        const path = [], steps = [];
+        let totalDistanceM = 0, totalDurationSec = 0;
+
+        for (const feature of data.features ?? []) {
+          const { geometry, properties } = feature;
+          if (properties.totalDistance !== undefined) {
+            totalDistanceM = properties.totalDistance;
+            totalDurationSec = properties.totalTime;
+          }
+          if (geometry.type === 'LineString') {
+            for (const coord of geometry.coordinates) path.push({ lng: coord[0], lat: coord[1] });
+          }
+          if (geometry.type === 'Point' && properties.description) {
+            steps.push({
+              guidance: properties.description,
+              name: properties.streetName ?? '',
+              distanceM: properties.distance ?? 0,
+              type: properties.turnType ?? 0,
+              lat: geometry.coordinates[1],
+              lng: geometry.coordinates[0],
+            });
+          }
+        }
+        response.json({ mode: 'WALK', distanceM: Math.round(totalDistanceM), durationSec: totalDurationSec, path, steps });
+        return;
+      }
+
+      console.warn('[tmap walk] 실패, OSRM으로 전환:', tmapRes.status);
+    } catch (tmapError) {
+      console.warn('[tmap walk] 오류, OSRM으로 전환:', tmapError.message);
+    }
   }
 
+  // OSRM fallback
   try {
-    const tmapRes = await fetch(`https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1&appKey=${encodeURIComponent(TMAP_APP_KEY)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        appKey: TMAP_APP_KEY,
-      },
-      body: JSON.stringify({
-        startX: String(originLng),
-        startY: String(originLat),
-        endX: String(destLng),
-        endY: String(destLat),
-        reqCoordType: 'WGS84GEO',
-        resCoordType: 'WGS84GEO',
-        startName: '출발지',
-        endName: '도착지',
-      }),
-    });
+    const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${oLng},${oLat};${dLng},${dLat}?overview=full&geometries=geojson&steps=true`;
+    const osrmRes = await fetch(osrmUrl);
+    const osrmData = await osrmRes.json();
 
-    const data = await tmapRes.json();
-
-    if (!tmapRes.ok) {
-      console.error('[tmap walk] 상태:', tmapRes.status, JSON.stringify(data));
-      response.status(tmapRes.status).json({ message: `도보 경로 조회 실패 (${tmapRes.status}): ${data?.error?.message ?? JSON.stringify(data)}` });
+    if (osrmData.code !== 'Ok' || !osrmData.routes?.length) {
+      response.status(404).json({ message: '도보 경로를 찾을 수 없습니다.' });
       return;
     }
 
-    const path = [];
+    const route = osrmData.routes[0];
+    const path = route.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
     const steps = [];
-    let totalDistanceM = 0;
-    let totalDurationSec = 0;
 
-    for (const feature of data.features ?? []) {
-      const { geometry, properties } = feature;
-
-      if (properties.totalDistance !== undefined) {
-        totalDistanceM = properties.totalDistance;
-        totalDurationSec = properties.totalTime; // 초 단위
-      }
-
-      if (geometry.type === 'LineString') {
-        for (const coord of geometry.coordinates) {
-          path.push({ lng: coord[0], lat: coord[1] });
-        }
-      }
-
-      if (geometry.type === 'Point' && properties.description) {
-        steps.push({
-          guidance: properties.description,
-          name: properties.streetName ?? '',
-          distanceM: properties.distance ?? 0,
-          type: properties.turnType ?? 0,
-          lat: geometry.coordinates[1],
-          lng: geometry.coordinates[0],
-        });
+    for (const leg of route.legs ?? []) {
+      for (const step of leg.steps ?? []) {
+        const { maneuver, name, distance } = step;
+        const mod = maneuver.modifier ?? '';
+        let type = 11, guidance = name || '직진';
+        if (maneuver.type === 'depart')       { type = 200; guidance = '출발지'; }
+        else if (maneuver.type === 'arrive')  { type = 201; guidance = '목적지 도착'; }
+        else if (mod.includes('left'))        { type = 12;  guidance = `좌회전${name ? ` — ${name}` : ''}`; }
+        else if (mod.includes('right'))       { type = 13;  guidance = `우회전${name ? ` — ${name}` : ''}`; }
+        else if (mod.includes('uturn'))       { type = 17;  guidance = 'U턴'; }
+        else if (name)                        { guidance = name; }
+        steps.push({ guidance, name: name ?? '', distanceM: Math.round(distance), type, lat: maneuver.location[1], lng: maneuver.location[0] });
       }
     }
 
-    response.json({
-      mode: 'WALK',
-      distanceM: Math.round(totalDistanceM),
-      durationSec: totalDurationSec,
-      path,
-      steps,
-    });
-  } catch (fetchError) {
-    console.error(fetchError);
+    const distanceM = Math.round(route.distance);
+    const durationSec = Math.round(distanceM / (4000 / 3600)); // 4km/h 기준
+    response.json({ mode: 'WALK', distanceM, durationSec, path, steps });
+  } catch (osrmError) {
+    console.error('[osrm walk]', osrmError);
     response.status(500).json({ message: '도보 경로 조회 중 오류가 발생했습니다.' });
   }
 });

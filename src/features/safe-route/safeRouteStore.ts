@@ -34,6 +34,7 @@ export interface RouteResult {
 interface SafeRouteState {
   shelters: Shelter[];
   selectedShelterId: string | null;
+  autoSelectedId: string | null;
   activeRoute: RouteResult | null;
   travelMode: TravelMode;
   isLoadingRoute: boolean;
@@ -57,6 +58,7 @@ let navWatchId: number | null = null;
 export const useSafeRouteStore = create<SafeRouteState>((set, get) => ({
   shelters: mockShelters,
   selectedShelterId: null,
+  autoSelectedId: null,
   activeRoute: null,
   travelMode: 'WALK',
   isLoadingRoute: false,
@@ -148,7 +150,22 @@ export const useSafeRouteStore = create<SafeRouteState>((set, get) => ({
           });
           shelters.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
 
-          set({ currentLocation: location, shelters, isLocating: false });
+          // 아직 선택된 대피소가 없으면 가장 가까운 운영 중 대피소 자동 선택
+          const { selectedShelterId } = get();
+          const nearest = shelters.find((s) => s.status !== '만원');
+          const shouldAutoSelect = !selectedShelterId && nearest;
+
+          set({
+            currentLocation: location,
+            shelters,
+            isLocating: false,
+            ...(shouldAutoSelect ? { selectedShelterId: nearest.id, autoSelectedId: nearest.id } : {}),
+          });
+
+          if (shouldAutoSelect) {
+            get().requestRoute(nearest.id).catch(() => {});
+          }
+
           resolve();
         },
         (error) => {
@@ -175,34 +192,8 @@ export const useSafeRouteStore = create<SafeRouteState>((set, get) => ({
     set({ isLoadingRoute: true, routeError: null });
 
     try {
-      if (travelMode === 'WALK') {
-        const data = await fetchTmapWalk(currentLocation, shelter);
-        set({ activeRoute: data, isLoadingRoute: false });
-        return;
-      }
-
-      const params = new URLSearchParams({
-        originLat: String(currentLocation.lat),
-        originLng: String(currentLocation.lng),
-        destLat: String(shelter.lat),
-        destLng: String(shelter.lng),
-      });
-
-      const res = await fetch(`/api/route/car?${params.toString()}`);
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data.message ?? '경로 조회에 실패했습니다.');
-
-      set({
-        activeRoute: {
-          mode: data.mode,
-          distanceM: data.distanceM,
-          durationSec: data.durationSec,
-          path: data.path,
-          steps: data.steps ?? [],
-        },
-        isLoadingRoute: false,
-      });
+      const data = await fetchTmapRoute(travelMode, currentLocation, shelter);
+      set({ activeRoute: data, isLoadingRoute: false });
     } catch (err) {
       console.error('[safeRouteStore] 경로 요청 실패:', err);
       set({
@@ -213,66 +204,21 @@ export const useSafeRouteStore = create<SafeRouteState>((set, get) => ({
   },
 }));
 
-async function fetchTmapWalk(
+async function fetchTmapRoute(
+  mode: TravelMode,
   origin: { lat: number; lng: number },
-  dest: { lat: number; lng: number; name: string },
+  dest: { lat: number; lng: number },
 ): Promise<RouteResult> {
-  const url =
-    `https://router.project-osrm.org/route/v1/foot/` +
-    `${origin.lng},${origin.lat};${dest.lng},${dest.lat}` +
-    `?overview=full&geometries=geojson&steps=true`;
+  const endpoint = mode === 'WALK' ? '/api/route/walk' : '/api/route/car';
+  const url = `${endpoint}?originLat=${origin.lat}&originLng=${origin.lng}&destLat=${dest.lat}&destLng=${dest.lng}`;
 
   const res = await fetch(url);
-  const data = await res.json();
-
-  if (data.code !== 'Ok' || !data.routes?.length) {
-    throw new Error('도보 경로를 찾을 수 없습니다.');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message ?? `경로 조회 실패 (${res.status})`);
   }
 
-  const route = data.routes[0];
-
-  const path: RoutePoint[] = route.geometry.coordinates.map(
-    (c: [number, number]) => ({ lng: c[0], lat: c[1] }),
-  );
-
-  const steps: RouteStep[] = [];
-  for (const leg of route.legs ?? []) {
-    for (const step of leg.steps ?? []) {
-      const { maneuver, name, distance } = step;
-      const mod: string = maneuver.modifier ?? '';
-
-      let type = 11;
-      let guidance = name || '직진';
-
-      if (maneuver.type === 'depart') { type = 200; guidance = '출발지'; }
-      else if (maneuver.type === 'arrive') { type = 201; guidance = '목적지 도착'; }
-      else if (mod.includes('left')) { type = 12; guidance = `좌회전${name ? ` — ${name}` : ''}`; }
-      else if (mod.includes('right')) { type = 13; guidance = `우회전${name ? ` — ${name}` : ''}`; }
-      else if (mod.includes('uturn')) { type = 17; guidance = 'U턴'; }
-      else if (name) { guidance = name; }
-
-      steps.push({
-        guidance,
-        name: name ?? '',
-        distanceM: Math.round(distance),
-        type,
-        lat: maneuver.location[1],
-        lng: maneuver.location[0],
-      });
-    }
-  }
-
-  const distanceM = Math.round(route.distance);
-  // 한국 도심 도보 실효 속도 4 km/h (신호 대기·횡단보도 포함)
-  const durationSec = Math.round(distanceM / (4000 / 3600));
-
-  return {
-    mode: 'WALK',
-    distanceM,
-    durationSec,
-    path,
-    steps,
-  };
+  return res.json() as Promise<RouteResult>;
 }
 
 function calcDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
