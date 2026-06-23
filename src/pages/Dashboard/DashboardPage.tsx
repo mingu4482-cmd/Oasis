@@ -40,6 +40,7 @@ const getRankedRegions = (regionalStatus: RegionalStatusResponse | null): Ranked
 export function DashboardPage() {
   const incidents = useDashboardStore((state) => state.activeIncidents);
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
+  const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
   const [regionalStatus, setRegionalStatus] = useState<RegionalStatusResponse | null>(null);
 
   useEffect(() => {
@@ -135,7 +136,7 @@ export function DashboardPage() {
                 </div>
               )}
               {allStable ? <p className="model-label">전체 지역 안정 상태입니다.</p> : null}
-              <Link className="command-link dashboard-detail-link" to="/risk-analysis">
+              <Link className="command-link dashboard-detail-link" to={`/risk-analysis?region=${encodeURIComponent(selectedRegion)}`}>
                 자세히 보기
               </Link>
             </section>
@@ -150,12 +151,17 @@ export function DashboardPage() {
               <div className="top-risk-list">
                 {top3Regions.length > 0 ? (
                   top3Regions.map((item) => (
-                    <div className="summary-row" key={item.regionName}>
+                    <button
+                      type="button"
+                      className="summary-row top-risk-button"
+                      key={item.regionName}
+                      onClick={() => setSelectedRegion(item.regionName)}
+                    >
                       <span>{item.regionName}</span>
                       <strong>
                         {item.riskLabel ?? 'SAFE'} · {item.riskScore}%
                       </strong>
-                    </div>
+                    </button>
                   ))
                 ) : (
                   <div className="summary-row">

@@ -650,6 +650,19 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .summary-stack, .top-risk-list { display: grid; gap: 8px; }
 
+.top-risk-button {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.top-risk-button:hover {
+  border-color: var(--brand-500);
+  box-shadow: var(--shadow-xs);
+}
+
 /* ── 대시보드 링크 ──────────────────────────────────────────────────────── */
 .dashboard-detail-link {
   width: 100%;
@@ -657,6 +670,222 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   border-color: var(--brand-600);
   background: var(--brand-600);
   color: #fff;
+}
+
+/* ── 지역 위험도 지도 ──────────────────────────────────────────────────── */
+.region-risk-map {
+  background: #edf4f2;
+}
+
+.region-risk-map .map-legend {
+  z-index: 20;
+}
+
+.region-risk-marker {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 86px;
+  min-height: 34px;
+  padding: 6px 9px 6px 7px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--marker-color);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, .22);
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.region-risk-marker::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #fff;
+  opacity: .92;
+}
+
+.region-risk-marker strong {
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.region-risk-marker.active,
+.region-risk-marker:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .3);
+}
+
+.region-info-window {
+  width: 230px;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, .12);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, .24);
+}
+
+.region-info-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.region-info-heading strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.region-info-heading span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.region-info-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.region-info-grid span {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.region-info-grid strong {
+  color: var(--text-primary);
+  font-weight: 800;
+  text-align: right;
+}
+
+.region-info-action {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--brand-600);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.region-info-action:hover {
+  background: var(--brand-700);
+}
+
+.region-map-fallback {
+  position: absolute;
+  inset: 18px;
+  z-index: 5;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, .9);
+  text-align: center;
+}
+
+.region-map-fallback strong {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.region-map-fallback span {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.region-fallback-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: min(100%, 520px);
+  margin-top: 6px;
+}
+
+.region-fallback-button {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.region-fallback-button.active {
+  border-color: var(--brand-600);
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+
+.region-fallback-button strong {
+  font-size: 11px;
+}
+
+.region-risk-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.region-map-error {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  z-index: 20;
+  padding: 8px 10px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.map-view-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.map-view-selected-region {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--brand-700);
 }
 
 /* ── 안전 경로 ──────────────────────────────────────────────────────────── */
