@@ -852,8 +852,81 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .nav-arrival h3 { margin: 0; color: var(--brand-700); font-size: 20px; font-weight: 800; }
 .nav-arrival p  { margin: 0; color: var(--text-muted); font-size: 13px; }
 
-/* ── 경로 단계 목록 ─────────────────────────────────────────────────────── */
-.route-steps {
+.situation-alert-card.alert-emphasis {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+
+.alert-source-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 82px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #cdd8d5;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #40514d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.alert-empty-state {
+  display: grid;
+  min-height: 72px;
+  place-items: center;
+  border: 1px dashed #cdd8d5;
+  border-radius: 8px;
+  color: #60706c;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.situation-alert-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.alert-message-box,
+.alert-action-list {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e1e8e6;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.alert-message-box {
+  grid-column: 1 / -1;
+}
+
+.alert-message-box span,
+.alert-action-list span {
+  color: #60706c;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.alert-message-box p {
+  margin: 0;
+  color: #162522;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.alert-action-list ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #26423d;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.summary-stack,
+.top-risk-list {
   display: grid;
   gap: 4px;
   padding: 0;
@@ -1035,27 +1108,115 @@ input.input-invalid { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220,38,3
   .overview-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-@media (max-width: 1080px) {
-  .overview-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .risk-analysis-grid, .report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .main-grid, .two-column, .signup-layout { grid-template-columns: 1fr; }
-  .signup-hero { position: static; min-height: auto; }
+.route-summary div {
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 12px;
+  border: 1px solid #e1e8e6;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.route-summary span {
+  color: #60706c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 1120px) {
+  .overview-strip,
+  .risk-analysis-grid,
+  .situation-alert-grid,
+  .report-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main-grid,
+  .two-column,
+  .signup-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .signup-hero {
+    position: static;
+    min-height: auto;
+  }
 }
 
 @media (max-width: 760px) {
-  .topbar { height: auto; min-height: 60px; align-items: flex-start; gap: 10px; padding: 12px; flex-wrap: wrap; }
-  .topbar-status { flex-wrap: wrap; justify-content: flex-end; }
-  .sidebar { top: 60px; width: min(82vw, 250px); height: calc(100vh - 60px); overflow-y: auto; }
-  .content { padding: 12px; }
-  .overview-strip, .risk-analysis-grid, .live-metric-grid, .metric-grid, .report-grid, .form-grid, .role-selector { grid-template-columns: 1fr; }
-  .signup-hero { padding: 20px; }
-  .signup-hero h1 { font-size: 26px; }
-  .signup-actions { flex-direction: column-reverse; }
-  .map-surface, .route-map, .layer-panel { min-height: 400px; }
-  .shelter-map { height: 480px; position: static; }
-  .map-column .map-surface { height: 420px; }
-  .shelter-list { max-height: 60vh; }
-  .layer-row { grid-template-columns: 1fr; }
-  .twin-overlay h1 { font-size: 28px; }
-  .shelter-list { max-height: none; }
+  .topbar {
+    height: auto;
+    min-height: 64px;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .topbar-status {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .shell-body {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    top: 64px;
+    width: min(82vw, 260px);
+    height: calc(100vh - 64px);
+    overflow-y: auto;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+  }
+
+  .content {
+    padding: 12px;
+  }
+
+  .overview-strip,
+  .risk-analysis-grid,
+  .situation-alert-grid,
+  .live-metric-grid,
+  .metric-grid,
+  .report-grid,
+  .form-grid,
+  .role-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .signup-hero {
+    padding: 20px;
+  }
+
+  .signup-hero h1 {
+    font-size: 28px;
+  }
+
+  .signup-actions {
+    flex-direction: column-reverse;
+  }
+
+  .map-surface,
+  .route-map,
+  .layer-panel {
+    min-height: 420px;
+  }
+
+  .risk-zone {
+    width: 126px;
+    height: 68px;
+    font-size: 12px;
+  }
+
+  .layer-row {
+    grid-template-columns: 1fr;
+  }
+
+  .twin-overlay h1 {
+    font-size: 30px;
+  }
 }

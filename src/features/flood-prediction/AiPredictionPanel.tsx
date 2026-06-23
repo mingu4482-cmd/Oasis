@@ -41,7 +41,6 @@ const formatValue = (value: number | undefined, unit: string) => (typeof value =
 export function AiPredictionPanel() {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
-  const setSimulationPrediction = useDashboardStore((state) => state.setSimulationPrediction);
   const [regions, setRegions] = useState<string[]>(fallbackRegions);
   const [liveData, setLiveData] = useState<LiveStatusResponse | null>(null);
   const [error, setError] = useState('');
@@ -50,7 +49,6 @@ export function AiPredictionPanel() {
     try {
       const data = await fetchLiveStatus(region);
       setLiveData(data);
-      setSimulationPrediction(null);
 
       if (!data.hasData) {
         setError('아직 수집된 실시간 데이터가 없습니다. 스케줄러 실행 상태를 확인하세요.');

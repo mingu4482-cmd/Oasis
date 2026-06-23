@@ -79,6 +79,45 @@ function toRiskForecast(payload) {
   };
 }
 
+function fallbackGeneratedAlert(payload) {
+  const rules = {
+    SAFE: {
+      alertLevel: '정상',
+      targetGroup: [],
+      title: `${payload.region} 침수 위험 정상`,
+      message: '현재 침수 위험은 낮은 상태입니다.',
+      actions: ['지속 모니터링'],
+    },
+    CAUTION: {
+      alertLevel: '관심',
+      targetGroup: ['관제 담당자'],
+      title: `${payload.region} 침수 위험 관심 단계`,
+      message: '침수 위험이 다소 증가했습니다. 지속적인 모니터링이 필요합니다.',
+      actions: ['강우량 및 하수관로 수위 변화 확인', '취약 지역 모니터링 유지'],
+    },
+    WARNING: {
+      alertLevel: '주의',
+      targetGroup: ['운영자', '유지보수팀'],
+      title: `${payload.region} 침수 위험 주의 경보`,
+      message: '침수 위험이 높아지고 있습니다. 배수 시설 점검과 현장 확인이 필요합니다.',
+      actions: ['배수 시설 점검', '현장 순찰 강화', '저지대 도로 상황 확인'],
+    },
+    DANGER: {
+      alertLevel: '긴급',
+      targetGroup: ['관리자', '상황실', '지자체 담당자'],
+      title: `${payload.region} 침수 위험 긴급 경보`,
+      message: '침수 위험이 매우 높습니다. 즉시 대응이 필요합니다.',
+      actions: ['긴급 대응 체계 가동', '도로 통제 검토', '주민 안내 준비', '배수 펌프 가동 상태 확인'],
+    },
+  };
+  const rule = rules[payload.riskLabel] ?? rules.CAUTION;
+  return {
+    ...rule,
+    createdAt: new Date().toISOString(),
+    source: 'fallback',
+  };
+}
+
 function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
   const hash = scryptSync(password, salt, 64).toString('hex');
@@ -290,29 +329,23 @@ app.post('/api/predict-risk', async (request, response) => {
   }
 });
 
-app.post('/api/simulate-risk', async (request, response) => {
+app.post('/api/generate-alert', async (request, response) => {
   try {
-    const aiResponse = await axios.post(`${aiServerUrl}/simulate`, request.body, {
-      timeout: 7000,
+    const aiResponse = await axios.post(`${aiServerUrl}/generate-alert`, request.body, {
+      timeout: 10000,
     });
 
     response.json(aiResponse.data);
-  } catch (simulateError) {
-    console.error('Failed to request AI risk simulation');
+  } catch (alertError) {
+    console.error('Failed to request AI alert generation');
 
-    if (simulateError.response) {
-      console.error(simulateError.response.data);
-      response.status(simulateError.response.status).json({
-        message: 'AI simulation request failed.',
-        detail: simulateError.response.data,
-      });
-      return;
+    if (alertError.response) {
+      console.error(alertError.response.data);
+    } else {
+      console.error(alertError.message);
     }
 
-    console.error(simulateError.message);
-    response.status(502).json({
-      message: 'Failed to communicate with the AI simulation server.',
-    });
+    response.json(fallbackGeneratedAlert(request.body));
   }
 });
 
@@ -346,7 +379,11 @@ app.post('/api/update-live-status', (request, response) => {
 
     latestLiveStatus = toLiveStatus(payload);
     latestRiskForecast = toRiskForecast(payload);
-    console.log('Live status updated from AI scheduler:', latestLiveStatus);
+    console.log('Live status updated from AI scheduler:', {
+      targetAreaName: latestLiveStatus.targetAreaName,
+      source: latestLiveStatus.source,
+      timestamp: latestLiveStatus.timestamp,
+    });
     response.json({ ok: true });
   } catch (error) {
     console.error('Failed to update live status');

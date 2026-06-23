@@ -17,7 +17,7 @@ class RiskPredictionResponse(BaseModel):
     riskScore: int
 
 
-class SimulationRiskRequest(BaseModel):
+class RiskForecastRequest(BaseModel):
     rainfall: float = Field(ge=0)
     waterLevel: float = Field(ge=0, le=100)
     drainageLevel: float = Field(ge=0, le=100)
@@ -34,7 +34,7 @@ class PredictionPoint(BaseModel):
     riskLabel: RiskLabel
 
 
-class SimulationRiskResponse(BaseModel):
+class RiskForecastResponse(BaseModel):
     modelVersion: str
     confidence: float
     riskScore: int
@@ -42,3 +42,24 @@ class SimulationRiskResponse(BaseModel):
     reasons: list[str]
     points: list[PredictionPoint]
     timestamp: str
+
+
+class GenerateAlertRequest(BaseModel):
+    region: str
+    riskScore: float = Field(ge=0, le=100)
+    riskLabel: str
+    rainfall: float = Field(ge=0)
+    waterLevel: float = Field(ge=0, le=100)
+    waterLevelRiseRate: float = Field(ge=0)
+    forecastRainfall1h: float = Field(ge=0)
+    source: str | None = None
+
+
+class GenerateAlertResponse(BaseModel):
+    alertLevel: str
+    targetGroup: list[str]
+    title: str
+    message: str
+    actions: list[str]
+    createdAt: str
+    source: str = "fallback"

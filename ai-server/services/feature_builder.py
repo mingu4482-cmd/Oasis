@@ -1,11 +1,11 @@
-from schemas.risk_schema import SensorData, SimulationRiskRequest
+from schemas.risk_schema import RiskForecastRequest, SensorData
 
 
 def clamp(value: float, minimum: float = 0.0, maximum: float = 100.0) -> float:
     return max(minimum, min(value, maximum))
 
 
-def build_sensor_data(payload: SimulationRiskRequest, hour: int = 0) -> SensorData:
+def build_sensor_data(payload: RiskForecastRequest, hour: int = 0) -> SensorData:
     hourly_rainfall = [
         payload.forecastRainfall1h,
         payload.forecastRainfall2h,
