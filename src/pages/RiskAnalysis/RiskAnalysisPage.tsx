@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AiPredictionPanel } from '../../features/flood-prediction/AiPredictionPanel';
 import { RiskPredictionChart } from '../../features/flood-prediction/RiskPredictionChart';
 import { fetchLiveStatus, generateAlert, GenerateAlertResponse, LiveStatusResponse } from '../../shared/api/aiApi';
@@ -139,6 +140,16 @@ function SituationAlertCard() {
 }
 
 export function RiskAnalysisPage() {
+  const [searchParams] = useSearchParams();
+  const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
+  const regionFromQuery = searchParams.get('region');
+
+  useEffect(() => {
+    if (regionFromQuery) {
+      setSelectedRegion(regionFromQuery);
+    }
+  }, [regionFromQuery, setSelectedRegion]);
+
   return (
     <AppShell>
       <div className="page-layout risk-analysis-page">
