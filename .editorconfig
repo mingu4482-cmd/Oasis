@@ -6,5 +6,5 @@ end_of_line = crlf
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-[*.{py,js,ts,tsx,json,md,css,html}]
+[*.{py,js,ts,tsx,json,md,css,html,env,example}]
 charset = utf-8

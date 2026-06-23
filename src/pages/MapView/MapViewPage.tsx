@@ -10,12 +10,13 @@ const MOCK_SENSORS = [
 ];
 
 export const MapViewPage = () => {
+    const kakaoMapKey = import.meta.env.VITE_KAKAO_MAP_KEY ?? '';
     const [center, setCenter] = useState({ lat: 37.4979, lng: 127.0276 });
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     // 🌟 2. React 안에서 카카오맵을 안전하게 불러오는 마법의 코드!
     const [loading, error] = useKakaoLoader({
-        appkey: '1cc92d0b3666ef740a88e12a74a1fe06', // <-- ⚠️ 여기에 꼭 진짜 키를 따옴표 안에 넣어주세요!
+        appkey: kakaoMapKey,
         libraries: ['services', 'clusterer'],
     });
 
@@ -34,7 +35,7 @@ export const MapViewPage = () => {
                 지도 불러오는 중... ⏳
             </div>
         );
-    if (error)
+    if (!kakaoMapKey || error)
         return (
             <div
                 style={{
@@ -45,7 +46,7 @@ export const MapViewPage = () => {
                     color: 'red',
                 }}
             >
-                지도 로딩 에러! (F12 콘솔창을 확인해주세요)
+                카카오 지도 키를 확인하세요.
             </div>
         );
 

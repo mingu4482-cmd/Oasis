@@ -1,18 +1,29 @@
 import logging
+import sys
 from pathlib import Path
 
 import joblib
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 
-from schemas.risk_schema import SensorData, SimulationRiskRequest
-from services.risk_predictor import predict_sensor_risk, simulate_risk
+from schemas.risk_schema import GenerateAlertRequest, SensorData
+from services.alert_generator import generate_alert
+from services.risk_predictor import predict_sensor_risk
 
 
-logging.basicConfig(level=logging.INFO)
+def configure_utf8_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+configure_utf8_stdio()
+logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger("oasis-ai-server")
 
 BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 MODEL_PATH = BASE_DIR / "models" / "risk_model.pkl"
 
 app = FastAPI(title="OASIS AI Risk Prediction Server")
@@ -65,7 +76,8 @@ def predict_risk(sensor_data: SensorData):
     return prediction.model_dump()
 
 
-@app.post("/simulate")
-def simulate(payload: SimulationRiskRequest):
-    result = simulate_risk(payload, model)
-    return result.model_dump()
+@app.post("/generate-alert")
+def create_alert(payload: GenerateAlertRequest):
+    alert = generate_alert(payload)
+    return alert.model_dump()
+

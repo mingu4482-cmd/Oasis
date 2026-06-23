@@ -31,11 +31,10 @@ const formatTimestamp = (timestamp?: string) => {
 
 export function RiskPredictionChart() {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
-  const simulationPrediction = useDashboardStore((state) => state.simulationPrediction);
   const [livePrediction, setLivePrediction] = useState<PredictionResult>(waitingPrediction);
   const [hasLiveData, setHasLiveData] = useState(false);
-  const activePrediction = simulationPrediction ?? livePrediction;
-  const chartMode = simulationPrediction ? '시뮬레이션 모드' : hasLiveData ? '실시간 지역 모니터링 모드' : '실시간 대기 모드';
+  const activePrediction = livePrediction;
+  const chartMode = hasLiveData ? '실시간 지역 모니터링 모드' : '실시간 대기 모드';
 
   const displayRisk = useMemo(() => {
     if (activePrediction.points.length === 0) return 0;

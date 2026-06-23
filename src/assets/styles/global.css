@@ -812,6 +812,79 @@ button:disabled {
   line-height: 1.55;
 }
 
+.situation-alert-card.alert-emphasis {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+
+.alert-source-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 82px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #cdd8d5;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #40514d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.alert-empty-state {
+  display: grid;
+  min-height: 72px;
+  place-items: center;
+  border: 1px dashed #cdd8d5;
+  border-radius: 8px;
+  color: #60706c;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.situation-alert-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.alert-message-box,
+.alert-action-list {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e1e8e6;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.alert-message-box {
+  grid-column: 1 / -1;
+}
+
+.alert-message-box span,
+.alert-action-list span {
+  color: #60706c;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.alert-message-box p {
+  margin: 0;
+  color: #162522;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.alert-action-list ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #26423d;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
 .summary-stack,
 .top-risk-list {
   display: grid;
@@ -1176,6 +1249,7 @@ textarea {
 @media (max-width: 1120px) {
   .overview-strip,
   .risk-analysis-grid,
+  .situation-alert-grid,
   .report-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1227,6 +1301,7 @@ textarea {
 
   .overview-strip,
   .risk-analysis-grid,
+  .situation-alert-grid,
   .live-metric-grid,
   .metric-grid,
   .report-grid,

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { LocateFixed } from 'lucide-react';
+import { useKakaoLoader } from 'react-kakao-maps-sdk';
 import { useSafeRouteStore } from './safeRouteStore';
 
 declare global {
   interface Window {
     kakao: any;
-    __kakaoReady: boolean;
   }
 }
 
@@ -15,20 +15,12 @@ const statusDotColor: Record<string, string> = {
   '만원': '#dc2626',
 };
 
-function waitForKakao(): Promise<void> {
-  return new Promise((resolve) => {
-    const check = () => {
-      if (window.__kakaoReady && window.kakao?.maps?.Map) {
-        resolve();
-      } else {
-        setTimeout(check, 100);
-      }
-    };
-    check();
-  });
-}
-
 export function ShelterMapPanel() {
+  const kakaoMapKey = import.meta.env.VITE_KAKAO_MAP_KEY ?? '';
+  const [loading, error] = useKakaoLoader({
+    appkey: kakaoMapKey,
+    libraries: ['services', 'clusterer'],
+  });
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -46,19 +38,17 @@ export function ShelterMapPanel() {
 
   // 지도 초기화
   useEffect(() => {
-    waitForKakao().then(() => {
-      if (!mapRef.current) return;
+    if (loading || error || !kakaoMapKey || !window.kakao?.maps?.Map || !mapRef.current) return;
 
-      const map = new window.kakao.maps.Map(mapRef.current, {
-        center: new window.kakao.maps.LatLng(37.5, 127.0),
-        level: 7,
-      });
-      mapInstanceRef.current = map;
-      setMapReady(true);
-
-      fetchCurrentLocation().catch(() => {});
+    const map = new window.kakao.maps.Map(mapRef.current, {
+      center: new window.kakao.maps.LatLng(37.5, 127.0),
+      level: 7,
     });
-  }, []);
+    mapInstanceRef.current = map;
+    setMapReady(true);
+
+    fetchCurrentLocation().catch(() => {});
+  }, [error, fetchCurrentLocation, kakaoMapKey, loading]);
 
   // 현재 위치 마커
   useEffect(() => {
@@ -156,6 +146,15 @@ export function ShelterMapPanel() {
         ref={mapRef}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '8px' }}
       />
+      {!kakaoMapKey || error ? (
+        <div className="alert-empty-state" style={{ position: 'absolute', inset: '16px', zIndex: 2 }}>
+          카카오 지도 키를 확인하세요.
+        </div>
+      ) : loading ? (
+        <div className="alert-empty-state" style={{ position: 'absolute', inset: '16px', zIndex: 2 }}>
+          지도를 불러오는 중입니다.
+        </div>
+      ) : null}
 
       <button
         type="button"
