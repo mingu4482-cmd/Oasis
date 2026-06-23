@@ -17,7 +17,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 export function ShelterMapPanel() {
   const kakaoMapKey = import.meta.env.VITE_KAKAO_MAP_KEY ?? '';
-  const [loading, error] = useKakaoLoader({
+  const [kakaoLoading, error] = useKakaoLoader({
     appkey: kakaoMapKey,
     libraries: ['services', 'clusterer'],
   });
@@ -27,11 +27,6 @@ export function ShelterMapPanel() {
   const currentOverlayRef = useRef<any>(null);
   const polylineRef = useRef<any>(null);
   const [mapReady, setMapReady] = useState(false);
-
-  const [loading] = useKakaoLoader({
-    appkey: KAKAO_APP_KEY,
-    libraries: ['services'],
-  });
 
   const shelters = useSafeRouteStore((s) => s.shelters);
   const selectedId = useSafeRouteStore((s) => s.selectedShelterId);
@@ -43,7 +38,7 @@ export function ShelterMapPanel() {
 
   // 지도 초기화 — SDK 로드 완료 후
   useEffect(() => {
-    if (loading || error || !kakaoMapKey || !window.kakao?.maps?.Map || !mapRef.current) return;
+    if (kakaoLoading || error || !kakaoMapKey || !window.kakao?.maps?.Map || !mapRef.current) return;
 
     const map = new window.kakao.maps.Map(mapRef.current, {
       center: new window.kakao.maps.LatLng(37.5, 127.0),
@@ -53,17 +48,17 @@ export function ShelterMapPanel() {
     setMapReady(true);
 
     fetchCurrentLocation().catch(() => {});
-  }, [error, fetchCurrentLocation, kakaoMapKey, loading]);
+  }, [error, fetchCurrentLocation, kakaoLoading, kakaoMapKey]);
 
   // 현재 위치 마커
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current || !currentLocation) return;
 
     // 창 크기 변경 시 지도 크기 재조정
-    const onResize = () => map.relayout();
+    const onResize = () => mapInstanceRef.current?.relayout();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [loading]);
+  }, [currentLocation, mapReady]);
 
   // 현재 위치 오버레이
   useEffect(() => {
@@ -138,7 +133,7 @@ export function ShelterMapPanel() {
 
   return (
     <section className="map-surface shelter-map" aria-label="안전 대피소 위치 지도">
-      {loading && (
+      {kakaoLoading && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f4f7f6', zIndex: 5, borderRadius: '8px' }}>
           <span style={{ color: '#0f766e', fontWeight: 700 }}>지도 로딩 중…</span>
         </div>
@@ -151,7 +146,7 @@ export function ShelterMapPanel() {
         <div className="alert-empty-state" style={{ position: 'absolute', inset: '16px', zIndex: 2 }}>
           카카오 지도 키를 확인하세요.
         </div>
-      ) : loading ? (
+      ) : kakaoLoading ? (
         <div className="alert-empty-state" style={{ position: 'absolute', inset: '16px', zIndex: 2 }}>
           지도를 불러오는 중입니다.
         </div>

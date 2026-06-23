@@ -4,10 +4,10 @@ OASIS는 공공 API 기반 침수 위험도 수집, AI 예측, 상황별 알림 
 
 ## 루트 파일
 
-- `.env.local`: Express 서버, DB, 선택적 경로 API 환경 변수
+- `.env.local`: Express 서버, DB, 카카오 지도, 선택적 경로 API 환경 변수
 - `.editorconfig`: UTF-8, CRLF 등 편집기 기본 설정
 - `.gitignore`: Git 추적 제외 설정
-- `index.html`: Vite SPA 진입 HTML
+- `index.html`: Vite SPA 진입 HTML, CRA `%PUBLIC_URL%` 문법 없이 Vite 방식으로 관리
 - `package.json`: npm 의존성 및 개발 스크립트
 - `package-lock.json`: npm 의존성 잠금 파일
 - `README.md`: 설치, 실행, API 사용 안내
@@ -45,8 +45,6 @@ Oasis/
 │  ├─ requirements.txt
 │  ├─ scheduler.py
 │  └─ train.py
-├─ public/
-│  └─ index.html
 ├─ server/
 │  └─ index.js
 ├─ src/
@@ -142,7 +140,7 @@ Express API 게이트웨이입니다.
 - `flood-prediction/mockData.ts`: 센서/지도/이벤트 최소 fallback 데이터
 - `kakao-map/KakaoMapPanel.tsx`: 대시보드 지도형 요약 패널
 - `safe-route/`
-  - `ShelterMapPanel.tsx`: 대피소 지도 패널
+  - `ShelterMapPanel.tsx`: `VITE_KAKAO_MAP_KEY`와 `useKakaoLoader` 기반 대피소 지도 패널
   - `ShelterList.tsx`: 대피소 목록과 경로 안내 UI
   - `safeRouteStore.ts`: 현재 위치, 대피소 선택, 경로 조회 상태
   - `mockData.ts`: 대피소 fallback 데이터
@@ -162,7 +160,8 @@ Express API 게이트웨이입니다.
   - 대피소 선택
   - 자동차/도보 경로 안내
 - `MapView/MapViewPage.tsx`
-  - 통합 지도 화면
+  - `VITE_KAKAO_MAP_KEY`와 `useKakaoLoader` 기반 통합 지도 화면
+  - 센서 위치, 위험 반경, 선택 지역 정보를 지도에 표시
 - `DigitalTwin/DigitalTwinPage.tsx`
   - 침수 깊이 시각화 화면
 - `AlertCenter/AlertCenterPage.tsx`
@@ -218,6 +217,41 @@ alert_generator.py
   └─ 키 없음/실패: source=fallback
 ```
 
+지도/경로 흐름:
+
+```text
+React MapViewPage / ShelterMapPanel
+        ↓
+VITE_KAKAO_MAP_KEY로 Kakao 지도 SDK 로드
+        ↓
+SafeRoutePage
+        ↓
+Express /api/route/car 또는 /api/route/walk
+        ↓
+카카오모빌리티 / T맵 API
+  └─ 키 없음 또는 도보 fallback: 직선거리 경로
+```
+
+## 주요 환경 변수
+
+프로젝트 루트 `.env.local`:
+
+- `API_PORT`: Express 서버 포트
+- `AI_SERVER_URL`: FastAPI AI 서버 주소
+- `DATABASE_URL`: PostgreSQL 연결 문자열
+- `VITE_KAKAO_MAP_KEY`: 브라우저에서 사용하는 카카오 지도 JavaScript 키
+- `KAKAO_REST_API_KEY`: Express 서버에서 사용하는 카카오모빌리티 REST API 키
+- `TMAP_APP_KEY`: Express 서버에서 사용하는 T맵 보행자 경로 API 키
+
+`ai-server/.env`:
+
+- `SEOUL_RAINFALL_API_KEY`, `SEOUL_DRAINPIPE_API_KEY`: 서울시 공공 API 키
+- `SEOUL_OPEN_API_BASE_URL`, `SEOUL_RAINFALL_SERVICE`, `SEOUL_DRAINPIPE_SERVICE`: 서울시 API 기본 주소와 서비스명
+- `KMA_API_KEY`, `KMA_FORECAST_URL`, `KMA_NX`, `KMA_NY`: 기상청 단기예보 API 설정
+- `TARGET_GU_NAME`, `TARGET_DRAINPIPE_KEYWORD`, `DANGER_WATER_LEVEL_M`: 수집 대상 지역과 위험 수위 기준
+- `EXPRESS_BASE_URL`, `COLLECT_INTERVAL_SECONDS`: 스케줄러 전송 대상과 수집 주기
+- `OPENAI_API_KEY`, `OPENAI_MODEL`: 상황별 침수 알림 생성용 OpenAI 설정
+
 ## 유지 중인 핵심 API
 
 Express:
@@ -242,6 +276,3 @@ FastAPI:
 - `POST /predict`
 - `POST /generate-alert`
 
-## 정리된 항목
-
-현재 구조에서는 MCP 서버, 수동 시뮬레이션 UI/API, AIHub, 부산 API, 기상청 AWS 관련 코드가 제거되어 있습니다. LLM 기능은 `OPENAI_API_KEY` 기반 상황별 알림 생성에만 사용됩니다.
