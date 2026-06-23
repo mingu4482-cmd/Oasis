@@ -15,7 +15,7 @@ export const MapViewPage = () => {
 
     // 🌟 2. React 안에서 카카오맵을 안전하게 불러오는 마법의 코드!
     const [loading, error] = useKakaoLoader({
-        appkey: '1cc92d0b3666ef740a88e12a74a1fe06', // <-- ⚠️ 여기에 꼭 진짜 키를 따옴표 안에 넣어주세요!
+        appkey: import.meta.env.VITE_KAKAO_MAP_KEY as string,
         libraries: ['services', 'clusterer'],
     });
 
