@@ -52,7 +52,7 @@ export interface PredictionPoint {
   riskLabel?: string;
 }
 
-export interface AiPrediction {
+export interface PredictionResult {
   modelVersion: string;
   confidence: number;
   points: PredictionPoint[];
@@ -62,20 +62,10 @@ export interface AiPrediction {
   fallbackUsed?: boolean;
 }
 
-export type PredictionResult = AiPrediction;
-
-export interface MapCenter {
-  lat: number;
-  lng: number;
-}
-
 export interface DashboardState {
   alertLevel: AlertLevel;
-  mapCenter: MapCenter;
   sensorSummary: SensorSummary;
   activeIncidents: Incident[];
-  aiPrediction: AiPrediction;
-  simulationPrediction: PredictionResult | null;
   selectedRegion: string;
 }
 

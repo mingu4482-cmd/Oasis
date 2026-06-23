@@ -6,9 +6,9 @@ import pandas as pd
 from schemas.risk_schema import (
     PredictionPoint,
     RiskPredictionResponse,
+    RiskForecastRequest,
+    RiskForecastResponse,
     SensorData,
-    SimulationRiskRequest,
-    SimulationRiskResponse,
 )
 from services.feature_builder import build_model_features, build_sensor_data, clamp
 
@@ -67,7 +67,7 @@ def predict_sensor_risk(sensor_data: SensorData, model: Any | None = None, drain
     )
 
 
-def build_reasons(payload: SimulationRiskRequest, risk_score: int) -> list[str]:
+def build_reasons(payload: RiskForecastRequest, risk_score: int) -> list[str]:
     reasons: list[str] = []
     if payload.rainfall >= 30:
         reasons.append("최근 강수량이 높습니다.")
@@ -86,7 +86,7 @@ def build_reasons(payload: SimulationRiskRequest, risk_score: int) -> list[str]:
     return reasons
 
 
-def simulate_risk(payload: SimulationRiskRequest, model: Any | None = None) -> SimulationRiskResponse:
+def build_risk_forecast(payload: RiskForecastRequest, model: Any | None = None) -> RiskForecastResponse:
     points: list[PredictionPoint] = []
     scores: list[int] = []
 
@@ -106,7 +106,7 @@ def simulate_risk(payload: SimulationRiskRequest, model: Any | None = None) -> S
     risk_score = max(scores)
     confidence = round(min(0.95, 0.62 + risk_score / 300), 2)
 
-    return SimulationRiskResponse(
+    return RiskForecastResponse(
         modelVersion=MODEL_VERSION,
         confidence=confidence,
         riskScore=risk_score,

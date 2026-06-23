@@ -12,8 +12,8 @@ import requests
 from apscheduler.schedulers.blocking import BlockingScheduler
 from dotenv import load_dotenv
 
-from schemas.risk_schema import SimulationRiskRequest
-from services.risk_predictor import simulate_risk
+from schemas.risk_schema import RiskForecastRequest
+from services.risk_predictor import build_risk_forecast
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -155,10 +155,6 @@ def parse_seoul_response(response: requests.Response) -> dict[str, Any]:
     return payload
 
 
-def format_korean_log_value(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, default=str)
-
-
 def log_seoul_result(name: str, service: str, result: dict[str, Any]) -> None:
     message = result.get("MESSAGE")
     logger.info(
@@ -168,17 +164,6 @@ def log_seoul_result(name: str, service: str, result: dict[str, Any]) -> None:
         result.get("CODE"),
         message,
     )
-    logger.info("%s %s RESULT: %s", LOG_PREFIX, name, format_korean_log_value(result))
-
-
-def log_seoul_row_fields(name: str, row: dict[str, Any]) -> None:
-    fields = {field: row.get(field) for field in SEOUL_LOG_FIELDS if field in row}
-    if fields:
-        logger.info("%s %s Korean fields: %s", LOG_PREFIX, name, format_korean_log_value(fields))
-
-
-def mask_url_key(url: str, api_key: str) -> str:
-    return url.replace(api_key, mask_key(api_key)) if api_key else url
 
 
 def request_seoul_api(name: str, api_key: str, service: str, path_suffix: str = "1/100/") -> dict[str, Any]:
@@ -191,11 +176,6 @@ def request_seoul_api(name: str, api_key: str, service: str, path_suffix: str = 
         payload = None
 
     logger.info("%s %s status: %s", LOG_PREFIX, name, response.status_code)
-    logger.info("%s %s request URL: %s", LOG_PREFIX, name, mask_url_key(url, api_key))
-    if isinstance(payload, dict):
-        logger.info("%s %s JSON keys: %s", LOG_PREFIX, name, list(payload.keys()))
-    else:
-        logger.info("%s %s response first 500 chars: %s", LOG_PREFIX, name, response.text[:500])
 
     response.raise_for_status()
     if not isinstance(payload, dict):
@@ -214,13 +194,9 @@ def extract_service_rows(payload: dict[str, Any], service: str) -> list[dict[str
                 raise RuntimeError(f"{service} error: {result}")
         rows = service_payload.get("row", [])
         if isinstance(rows, dict):
-            log_seoul_row_fields(service, rows)
             return [rows]
         if isinstance(rows, list):
-            valid_rows = [row for row in rows if isinstance(row, dict)]
-            for row in valid_rows[:3]:
-                log_seoul_row_fields(service, row)
-            return valid_rows
+            return [row for row in rows if isinstance(row, dict)]
         return []
 
     result = payload.get("RESULT")
@@ -271,7 +247,6 @@ def fetch_drainpipe_rows() -> list[dict[str, Any]]:
     for code in range(1, 26):
         se_cd = f"{code:02d}"
         path_suffix = f"1/500/{se_cd}/{start_time}/{end_time}"
-        logger.info("%s fetching drainpipe data for SE_CD %s", LOG_PREFIX, se_cd)
         try:
             payload = request_seoul_api(
                 f"Seoul drainpipe API SE_CD {se_cd}",
@@ -280,7 +255,6 @@ def fetch_drainpipe_rows() -> list[dict[str, Any]]:
                 path_suffix,
             )
             rows = extract_service_rows(payload, SEOUL_DRAINPIPE_SERVICE)
-            logger.info("%s drainpipe SE_CD %s rows: %s", LOG_PREFIX, se_cd, len(rows))
             all_rows.extend(rows)
         except Exception as error:
             logger.warning("%s drainpipe SE_CD %s failed. error=%s", LOG_PREFIX, se_cd, error)
@@ -353,20 +327,11 @@ def build_drainpipe_map(rows: list[dict[str, Any]]) -> tuple[dict[str, dict[str,
         return {}, None
 
     latest_global = max(parsed_rows, key=lambda row: row_sort_key(row, "MSRMT_YMD", "MSRMT_WATL"))
-    available_regions = sorted(
-        {
-            normalized_region
-            for row in parsed_rows
-            if (normalized_region := normalize_se_nm_to_region(row.get("SE_NM")))
-        }
-    )
     logger.info("%s total drainpipe rows: %s", LOG_PREFIX, len(parsed_rows))
-    logger.info("%s available drainpipe regions: %s", LOG_PREFIX, available_regions)
 
     result = {}
     for region in REGION_GRID:
         keywords = REGION_KEYWORDS.get(region, [region])
-        logger.info("%s drainpipe region=%s keywords=%s", LOG_PREFIX, region, keywords)
         se_nm_matches = [
             row
             for row in parsed_rows
@@ -378,11 +343,9 @@ def build_drainpipe_map(rows: list[dict[str, Any]]) -> tuple[dict[str, dict[str,
             if any(keyword in str(row.get("PSTN_INFO", "")) for keyword in keywords)
         ]
         matches = se_nm_matches or keyword_matches
-        logger.info("%s matched drainpipe rows for %s: %s", LOG_PREFIX, region, len(matches))
         if not matches:
             continue
         selected = max(matches, key=lambda row: row_sort_key(row, "MSRMT_YMD", "MSRMT_WATL"))
-        logger.info("%s selected drainpipe row for %s: %s", LOG_PREFIX, region, summarize_row(selected))
         raw_water_level = max(parse_float(selected.get("MSRMT_WATL")) or 0.0, 0.0)
         result[region] = {
             "rawWaterLevel": raw_water_level,
@@ -508,16 +471,16 @@ def source_from_success(success_count: int) -> str:
 
 
 def build_payload_from_input(payload: dict[str, float], source: str) -> dict[str, Any]:
-    simulation_input = SimulationRiskRequest(**payload)
-    prediction = simulate_risk(simulation_input)
+    forecast_input = RiskForecastRequest(**payload)
+    prediction = build_risk_forecast(forecast_input)
     return {
-        "rainfall": simulation_input.rainfall,
-        "waterLevel": simulation_input.waterLevel,
-        "drainageLevel": simulation_input.drainageLevel,
-        "waterLevelRiseRate": simulation_input.waterLevelRiseRate,
-        "forecastRainfall1h": simulation_input.forecastRainfall1h,
-        "forecastRainfall2h": simulation_input.forecastRainfall2h,
-        "forecastRainfall3h": simulation_input.forecastRainfall3h,
+        "rainfall": forecast_input.rainfall,
+        "waterLevel": forecast_input.waterLevel,
+        "drainageLevel": forecast_input.drainageLevel,
+        "waterLevelRiseRate": forecast_input.waterLevelRiseRate,
+        "forecastRainfall1h": forecast_input.forecastRainfall1h,
+        "forecastRainfall2h": forecast_input.forecastRainfall2h,
+        "forecastRainfall3h": forecast_input.forecastRainfall3h,
         "riskScore": prediction.riskScore,
         "riskLabel": prediction.riskLabel,
         "confidence": prediction.confidence,

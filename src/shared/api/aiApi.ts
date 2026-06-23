@@ -40,31 +40,11 @@ export async function fetchRiskForecast(region?: string) {
   return response.data;
 }
 
-export interface SimulationRiskRequest {
-  rainfall: number;
-  waterLevel: number;
-  drainageLevel: number;
-  waterLevelRiseRate: number;
-  forecastRainfall1h: number;
-  forecastRainfall2h: number;
-  forecastRainfall3h: number;
-}
-
-export interface SimulationRiskPoint {
+export interface RiskForecastPoint {
   time: string;
   risk: number;
   rainfall: number;
   riskLabel: RiskLabel;
-}
-
-export interface SimulationRiskResponse {
-  modelVersion: string;
-  confidence: number;
-  riskScore: number;
-  riskLabel: RiskLabel;
-  reasons: string[];
-  points: SimulationRiskPoint[];
-  timestamp: string;
 }
 
 export interface LiveStatusResponse {
@@ -80,7 +60,7 @@ export interface LiveStatusResponse {
   riskScore?: number;
   riskLabel?: RiskLabel;
   confidence?: number;
-  points?: SimulationRiskPoint[];
+  points?: RiskForecastPoint[];
   source?: string;
   timestamp?: string;
   rainfallStation?: string;
@@ -96,6 +76,27 @@ export interface LiveStatusResponse {
   level_velocity?: number;
   current_rainfall?: number;
   forecast_rainfall?: number;
+}
+
+export interface GenerateAlertRequest {
+  region: string;
+  riskScore: number;
+  riskLabel: RiskLabel | string;
+  rainfall: number;
+  waterLevel: number;
+  waterLevelRiseRate: number;
+  forecastRainfall1h: number;
+  source?: string;
+}
+
+export interface GenerateAlertResponse {
+  alertLevel: string;
+  targetGroup: string[];
+  title: string;
+  message: string;
+  actions: string[];
+  createdAt: string;
+  source?: 'openai' | 'fallback' | string;
 }
 
 export interface RegionsResponse {
@@ -131,7 +132,7 @@ export async function fetchLiveStatus(region?: string) {
   return response.data;
 }
 
-export async function simulateRisk(payload: SimulationRiskRequest): Promise<SimulationRiskResponse> {
-  const response = await apiClient.post<SimulationRiskResponse>('/simulate-risk', payload);
+export async function generateAlert(payload: GenerateAlertRequest): Promise<GenerateAlertResponse> {
+  const response = await apiClient.post<GenerateAlertResponse>('/generate-alert', payload);
   return response.data;
 }
