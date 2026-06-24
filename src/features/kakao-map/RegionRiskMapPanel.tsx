@@ -201,8 +201,6 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
                 <strong>{formatNumber(activeItem.status?.rainfall, 'mm')}</strong>
                 <span>하수관로 수위</span>
                 <strong>{formatNumber(activeItem.status?.waterLevel, '%')}</strong>
-                <span>데이터 출처</span>
-                <strong>{activeItem.status?.source ?? (regionalStatus?.hasData ? 'regional api' : 'fallback')}</strong>
               </div>
               <button type="button" className="region-info-action" onClick={() => openRiskAnalysis(activeItem.name)}>
                 상세 분석 보기
