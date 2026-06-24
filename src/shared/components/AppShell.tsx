@@ -1,6 +1,5 @@
 import {
   Activity,
-  AlertTriangle,
   Bell,
   FileText,
   Home,
@@ -10,7 +9,6 @@ import {
   Menu,
   Route,
   Satellite,
-  ShieldCheck,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -19,7 +17,6 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { logout } from '../api/authApi';
 import { useRealtimeClock } from '../hooks/useRealtimeClock';
 import { useAuthStore } from '../store/authStore';
-import { useDashboardStore } from '../store/dashboardStore';
 import { UserRole } from '../types/domain';
 
 const navItems: Array<{ to: string; label: string; icon: typeof Home; roles: Array<UserRole | 'GUEST'> }> = [
@@ -34,7 +31,6 @@ const navItems: Array<{ to: string; label: string; icon: typeof Home; roles: Arr
 
 export function AppShell({ children }: PropsWithChildren) {
   const navigate = useNavigate();
-  const alertLevel = useDashboardStore((state) => state.alertLevel);
   const currentUser = useAuthStore((state) => state.currentUser);
   const clearUser = useAuthStore((state) => state.clearUser);
   const now = useRealtimeClock();
@@ -65,7 +61,6 @@ export function AppShell({ children }: PropsWithChildren) {
             {isMenuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
           </button>
           <div className="brand">
-            <ShieldCheck size={22} aria-hidden="true" />
             <span>OASIS</span>
           </div>
         </div>
@@ -90,10 +85,6 @@ export function AppShell({ children }: PropsWithChildren) {
               </Link>
             </div>
           )}
-          <span className={`alert-badge alert-${alertLevel.toLowerCase()}`}>
-            <AlertTriangle size={16} aria-hidden="true" />
-            {alertLevel}
-          </span>
           <span className="clock">{now.toLocaleTimeString('ko-KR')}</span>
           <button className="icon-button" type="button" aria-label="알림">
             <Bell size={18} aria-hidden="true" />

@@ -84,6 +84,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .topbar-left  { gap: 12px; }
 .topbar-status { gap: 10px; }
+.auth-actions { gap: 8px; }
 
 .brand {
   gap: 9px;

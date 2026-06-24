@@ -170,10 +170,6 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRi
                 <strong>{formatNumber(activeItem.status?.rainfall, 'mm')}</strong>
                 <span>하수관로 수위</span>
                 <strong>{formatNumber(activeItem.status?.waterLevel, '%')}</strong>
-                <span>데이터 상태</span>
-                <strong>{DATA_STATUS_LABEL[activeItem.status?.dataStatus ?? 'UNAVAILABLE'] ?? '-'}</strong>
-                <span>데이터 출처</span>
-                <strong>{activeItem.status?.source ?? (regionalStatus?.hasData ? 'regional api' : 'fallback')}</strong>
               </div>
               {activeItem.status?.dataStatus === 'PARTIAL' ? (
                 <p className="model-label">일부 데이터가 수집되지 않아 분석 신뢰도가 낮습니다.</p>

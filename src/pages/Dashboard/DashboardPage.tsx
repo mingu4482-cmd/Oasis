@@ -109,10 +109,6 @@ export function DashboardPage() {
                     <span>위험도</span>
                     <strong>{highestRiskRegion.riskScore}%</strong>
                   </div>
-                  <div className="summary-row">
-                    <span>데이터 출처</span>
-                    <strong>{highestRiskRegion.source ?? 'realtime api waiting'}</strong>
-                  </div>
                 </div>
               ) : (
                 <div className="summary-row">
