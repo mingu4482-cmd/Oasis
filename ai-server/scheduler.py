@@ -82,13 +82,20 @@ REGION_KEYWORDS = {
 }
 
 FALLBACK_PAYLOAD = {
-    "rainfall": 38.0,
-    "waterLevel": 82.0,
-    "drainageLevel": 55.0,
-    "waterLevelRiseRate": 6.4,
-    "forecastRainfall1h": 46.0,
-    "forecastRainfall2h": 33.0,
-    "forecastRainfall3h": 20.0,
+    "rainfall": 0.0,
+    "waterLevel": 20.0,
+    "drainageLevel": 75.0,
+    "waterLevelRiseRate": 0.0,
+    "forecastRainfall1h": 0.0,
+    "forecastRainfall2h": 0.0,
+    "forecastRainfall3h": 0.0,
+}
+
+DATA_STATUS_LABELS = {
+    "REALTIME": "실시간 API 기반 분석",
+    "PARTIAL": "일부 데이터가 수집되지 않아 분석 신뢰도가 낮습니다.",
+    "FALLBACK": "fallback 데이터가 포함되어 참고용 상태만 제공합니다.",
+    "UNAVAILABLE": "핵심 데이터가 부족해 위험도 계산을 보류했습니다.",
 }
 
 
@@ -378,13 +385,13 @@ def drainpipe_from_fallback_row(row: dict[str, Any] | None) -> dict[str, Any]:
     raw_water_level = max(parse_float(row.get("MSRMT_WATL")) or 0.0, 0.0)
     return {
         "rawWaterLevel": raw_water_level,
-        "waterLevel": min(100.0, max(0.0, round((raw_water_level / DANGER_WATER_LEVEL_M) * 100, 1))),
+        "waterLevel": FALLBACK_PAYLOAD["waterLevel"],
         "waterLevelRiseRate": 0.0,
         "drainpipeStation": row.get("SE_NM") or row.get("UNQ_NO") or "latest Seoul drainpipe",
         "drainpipeMeasuredAt": row.get("MSRMT_YMD"),
         "drainpipePosition": row.get("PSTN_INFO"),
         "usesFallbackDrainpipe": True,
-        "fallbackReason": "선택 지역의 하수관로 관측값이 없어 최신 서울시 하수관로 지점으로 대체했습니다.",
+        "fallbackReason": "선택 지역의 하수관로 관측값이 없어 중립 fallback 수위로 보정했습니다.",
     }
 
 
@@ -452,11 +459,7 @@ def build_forecast_map() -> tuple[dict[str, list[float]], set[str]]:
         if grid_key in forecast_by_grid:
             forecast_by_region[region] = forecast_by_grid[grid_key]
         else:
-            forecast_by_region[region] = [
-                FALLBACK_PAYLOAD["forecastRainfall1h"],
-                FALLBACK_PAYLOAD["forecastRainfall2h"],
-                FALLBACK_PAYLOAD["forecastRainfall3h"],
-            ]
+            forecast_by_region[region] = [0.0, 0.0, 0.0]
             failed_regions.add(region)
 
     return forecast_by_region, failed_regions
@@ -467,10 +470,21 @@ def source_from_success(success_count: int) -> str:
         return "realtime api"
     if success_count == 0:
         return "fallback mock"
-    return "partial realtime api + fallback"
+    return "partial realtime api"
 
 
-def build_payload_from_input(payload: dict[str, float], source: str) -> dict[str, Any]:
+def data_status_from_success(rainfall_success: bool, drainpipe_success: bool, forecast_success: bool) -> str:
+    success_count = int(rainfall_success) + int(drainpipe_success) + int(forecast_success)
+    if success_count == 3:
+        return "REALTIME"
+    if not rainfall_success and not drainpipe_success:
+        return "UNAVAILABLE"
+    if success_count > 0:
+        return "PARTIAL"
+    return "FALLBACK"
+
+
+def build_payload_from_input(payload: dict[str, Any], source: str) -> dict[str, Any]:
     forecast_input = RiskForecastRequest(**payload)
     prediction = build_risk_forecast(forecast_input)
     return {
@@ -481,9 +495,12 @@ def build_payload_from_input(payload: dict[str, float], source: str) -> dict[str
         "forecastRainfall1h": forecast_input.forecastRainfall1h,
         "forecastRainfall2h": forecast_input.forecastRainfall2h,
         "forecastRainfall3h": forecast_input.forecastRainfall3h,
+        "forecastStatus": forecast_input.forecastStatus,
         "riskScore": prediction.riskScore,
         "riskLabel": prediction.riskLabel,
         "confidence": prediction.confidence,
+        "message": prediction.message,
+        "reasons": prediction.reasons,
         "points": [point.model_dump() for point in prediction.points],
         "modelVersion": prediction.modelVersion,
         "source": source,
@@ -520,11 +537,13 @@ def build_region_status(
 
     forecast = forecast_map[region]
     forecast_success = region not in failed_forecast_regions
+    forecast_status = "OK" if forecast_success else "FAILED"
     if not forecast_success:
-        warnings.append("선택 지역의 기상청 예보 조회에 실패해 fallback 예보를 사용했습니다.")
+        warnings.append("선택 지역의 기상청 예보 조회에 실패해 예보 강수량을 0mm로 보정했습니다.")
 
     success_count = int(rainfall_success) + int(drainpipe_success) + int(forecast_success)
     source = source_from_success(success_count)
+    data_status = data_status_from_success(rainfall_success, drainpipe_success, forecast_success)
     payload = build_payload_from_input(
         {
             "rainfall": rainfall,
@@ -534,14 +553,27 @@ def build_region_status(
             "forecastRainfall1h": forecast[0],
             "forecastRainfall2h": forecast[1],
             "forecastRainfall3h": forecast[2],
+            "forecastStatus": forecast_status,
+            "source": source,
         },
         source,
     )
+
+    if data_status == "UNAVAILABLE":
+        payload["riskScore"] = 0
+        payload["riskLabel"] = "SAFE"
+        payload["confidence"] = 0
+        payload["message"] = "해당 지역은 현재 실시간 데이터가 부족하여 AI 위험도 분석을 제공할 수 없습니다."
+        payload["points"] = []
+    elif data_status == "FALLBACK":
+        payload["confidence"] = min(payload["confidence"], 0.35)
 
     grid = REGION_GRID[region]
     return {
         **payload,
         "hasData": True,
+        "dataStatus": data_status,
+        "dataStatusMessage": DATA_STATUS_LABELS[data_status],
         "targetAreaName": region,
         "rainfallStation": rainfall_meta.get("rainfallStation"),
         "rainfallObservedAt": rainfall_meta.get("rainfallObservedAt"),

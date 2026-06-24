@@ -1,5 +1,6 @@
+import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Gauge } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { LiveStatusResponse, RiskLabel, fetchLiveStatus, fetchRegions } from '../../shared/api/aiApi';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
 
@@ -11,6 +12,15 @@ const riskMeta: Record<RiskLabel, { label: RiskLabel; className: string }> = {
 };
 
 const fallbackRegions = ['강남구', '서초구', '관악구', '동작구', '영등포구', '구로구', '양천구', '마포구', '성동구', '광진구'];
+
+const DATA_STATUS_LABEL: Record<string, string> = {
+  REALTIME: '실시간',
+  PARTIAL: '일부 수집',
+  FALLBACK: 'fallback',
+  UNAVAILABLE: '계산 불가',
+};
+
+export const liveStatusQueryKey = (region: string) => ['live-status', region] as const;
 
 const getRiskLabel = (score: number): RiskLabel => {
   if (score >= 80) return 'DANGER';
@@ -38,54 +48,37 @@ const formatTimestamp = (timestamp?: string | null) => {
 
 const formatValue = (value: number | undefined, unit: string) => (typeof value === 'number' ? `${value}${unit}` : '-');
 
+export function useLiveStatusQuery(region: string) {
+  return useQuery<LiveStatusResponse>({
+    queryKey: liveStatusQueryKey(region),
+    queryFn: () => fetchLiveStatus(region),
+    staleTime: 30_000,
+  });
+}
+
 export function AiPredictionPanel() {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
-  const [regions, setRegions] = useState<string[]>(fallbackRegions);
-  const [liveData, setLiveData] = useState<LiveStatusResponse | null>(null);
-  const [error, setError] = useState('');
 
-  const loadLiveStatus = async (region = selectedRegion) => {
-    try {
-      const data = await fetchLiveStatus(region);
-      setLiveData(data);
+  const regionsQuery = useQuery({
+    queryKey: ['regions'],
+    queryFn: fetchRegions,
+    staleTime: 60_000,
+  });
+  const liveStatusQuery = useLiveStatusQuery(selectedRegion);
+  const liveData = liveStatusQuery.data ?? null;
 
-      if (!data.hasData) {
-        setError('아직 수집된 실시간 데이터가 없습니다. 스케줄러 실행 상태를 확인하세요.');
-        return;
-      }
-
-      setError('');
-    } catch (fetchError) {
-      console.error('Failed to fetch live status:', fetchError);
-      setError('실시간 데이터를 조회하는 중 오류가 발생했습니다.');
+  useEffect(() => {
+    if (!selectedRegion && regionsQuery.data?.defaultRegion) {
+      setSelectedRegion(regionsQuery.data.defaultRegion);
     }
-  };
+  }, [regionsQuery.data?.defaultRegion, selectedRegion, setSelectedRegion]);
 
-  useEffect(() => {
-    fetchRegions()
-      .then((data) => {
-        setRegions(data.regions.length > 0 ? data.regions : fallbackRegions);
-        if (!selectedRegion && data.defaultRegion) {
-          setSelectedRegion(data.defaultRegion);
-        }
-      })
-      .catch((regionsError) => {
-        console.error('Failed to fetch regions:', regionsError);
-        setRegions(fallbackRegions);
-      });
-  }, [selectedRegion, setSelectedRegion]);
-
-  useEffect(() => {
-    loadLiveStatus(selectedRegion);
-    const interval = window.setInterval(() => loadLiveStatus(selectedRegion), 30000);
-
-    return () => window.clearInterval(interval);
-  }, [selectedRegion]);
-
+  const regions = regionsQuery.data?.regions?.length ? regionsQuery.data.regions : fallbackRegions;
   const riskScore = liveData?.riskScore ?? 0;
   const riskLabel = liveData?.hasData ? toRiskLabel(liveData.riskLabel, riskScore) : null;
   const risk = riskLabel ? riskMeta[riskLabel] : null;
+  const isUnavailable = liveData?.dataStatus === 'FALLBACK' || liveData?.dataStatus === 'UNAVAILABLE';
   const liveWarnings = Array.from(
     new Set([...(liveData?.warnings ?? []), liveData?.fallbackReason].filter(Boolean) as string[]),
   );
@@ -95,7 +88,7 @@ export function AiPredictionPanel() {
       <div className="panel-heading">
         <div>
           <span className="eyebrow">실시간 지역 모니터링</span>
-          <h2>AI 침수 위험도 결과</h2>
+          <h2>AI 침수 위험 결과</h2>
         </div>
         <Gauge size={22} />
       </div>
@@ -115,7 +108,7 @@ export function AiPredictionPanel() {
         <div className="ai-result-box risk-analysis-card">
           <span>실시간 수집값</span>
           <div className="live-metric-grid">
-            <strong>강수량 {liveData?.hasData ? formatValue(liveData.rainfall, 'mm') : '-'}</strong>
+            <strong>강우량 {liveData?.hasData ? formatValue(liveData.rainfall, 'mm') : '-'}</strong>
             <strong>하수관로 수위 {liveData?.hasData ? formatValue(liveData.waterLevel, '%') : '-'}</strong>
             <strong>배수 상태 {liveData?.hasData ? formatValue(liveData.drainageLevel, '%') : '-'}</strong>
             <strong>상승 속도 {liveData?.hasData ? formatValue(liveData.waterLevelRiseRate, 'm/h') : '-'}</strong>
@@ -128,31 +121,43 @@ export function AiPredictionPanel() {
         <div className="ai-result-box risk-analysis-card">
           <span>AI 예측 결과</span>
           <div className="risk-score-row">
-            <strong>{riskScore}%</strong>
-            {risk ? (
+            <strong>{isUnavailable ? '-' : `${riskScore}%`}</strong>
+            {risk && !isUnavailable ? (
               <strong className={`ai-risk-badge ${risk.className}`}>{risk.label}</strong>
             ) : (
-              <strong className="ai-risk-placeholder">대기 중</strong>
+              <strong className="ai-risk-placeholder">데이터 부족</strong>
             )}
           </div>
+          {liveData?.message ? <p className="model-label">{liveData.message}</p> : null}
         </div>
 
         <div className="ai-result-box risk-analysis-card data-basis-card">
           <span>데이터 기준 정보</span>
           <div>
             <div>분석 기준 위치: {liveData?.targetAreaName ?? selectedRegion}</div>
-            <div>강우량 기준: {liveData?.rainfallStation ?? '-'} / {liveData?.rainfallObservedAt ?? '-'}</div>
-            <div>하수관로 기준: {liveData?.drainpipeStation ?? '-'} / {liveData?.drainpipeMeasuredAt ?? '-'}</div>
+            <div>강우 관측: {liveData?.rainfallStation ?? '-'} / {liveData?.rainfallObservedAt ?? '-'}</div>
+            <div>하수관로 관측: {liveData?.drainpipeStation ?? '-'} / {liveData?.drainpipeMeasuredAt ?? '-'}</div>
             <div>
-              예보 기준: 기상청 격자 nx {liveData?.forecastGrid?.nx ?? '-'}, ny {liveData?.forecastGrid?.ny ?? '-'}
+              예보 격자: nx {liveData?.forecastGrid?.nx ?? '-'}, ny {liveData?.forecastGrid?.ny ?? '-'}
             </div>
+            <div>데이터 상태: {DATA_STATUS_LABEL[liveData?.dataStatus ?? 'UNAVAILABLE'] ?? '-'}</div>
             <div>데이터 출처: {liveData?.source ?? 'realtime api waiting'}</div>
             <div>마지막 업데이트: {formatTimestamp(liveData?.timestamp)}</div>
           </div>
         </div>
       </div>
 
-      {error ? <div className="ai-prediction-error">{error}</div> : null}
+      {liveStatusQuery.isFetching ? <div className="ai-prediction-error">데이터 갱신 중</div> : null}
+      {!liveData?.hasData && !liveStatusQuery.isFetching ? (
+        <div className="ai-prediction-error">아직 수집된 실시간 위험도 데이터가 없습니다.</div>
+      ) : null}
+      {liveData?.dataStatus === 'PARTIAL' ? (
+        <div className="ai-prediction-error">일부 데이터가 수집되지 않아 분석 신뢰도가 낮습니다.</div>
+      ) : null}
+      {isUnavailable ? (
+        <div className="ai-prediction-error">해당 지역은 현재 실시간 데이터가 부족하여 AI 위험도 분석을 제공할 수 없습니다.</div>
+      ) : null}
+      {liveData?.dataStatus === 'REALTIME' ? <div className="model-label">실시간 API 기반 분석</div> : null}
       {liveWarnings.length ? (
         <div className="ai-prediction-error">
           {liveWarnings.map((warning) => (
