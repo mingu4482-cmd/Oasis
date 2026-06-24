@@ -1,5 +1,6 @@
 import { Activity, AlertTriangle, Clock, Database, Droplets, MapPin } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { IncidentTimeline } from '../../features/alert-system/IncidentTimeline';
 import { KakaoMapPanel } from '../../features/kakao-map/KakaoMapPanel';
@@ -29,6 +30,7 @@ const getRankedRegions = (regionalStatus: RegionalStatusResponse | null): Ranked
   }
 
   return Object.entries(regionalStatus.regionStatusMap)
+    .filter(([, status]) => status.dataStatus !== 'FALLBACK' && status.dataStatus !== 'UNAVAILABLE')
     .map(([regionName, status]) => ({
       ...status,
       regionName: status.targetAreaName ?? regionName,
@@ -41,30 +43,13 @@ export function DashboardPage() {
   const incidents = useDashboardStore((state) => state.activeIncidents);
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
-  const [regionalStatus, setRegionalStatus] = useState<RegionalStatusResponse | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadSummary = async () => {
-      try {
-        const data = await fetchRegionalStatus();
-        if (isMounted) {
-          setRegionalStatus(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch dashboard regional summary:', error);
-      }
-    };
-
-    loadSummary();
-    const interval = window.setInterval(loadSummary, 30000);
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(interval);
-    };
-  }, []);
+  const regionalStatusQuery = useQuery({
+    queryKey: ['regional-status'],
+    queryFn: fetchRegionalStatus,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+  const regionalStatus = regionalStatusQuery.data ?? null;
 
   const rankedRegions = useMemo(() => getRankedRegions(regionalStatus), [regionalStatus]);
   const highestRiskRegion = rankedRegions[0] ?? null;

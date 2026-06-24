@@ -21,6 +21,9 @@ MODEL_CLASS_SCORES = {
     3: 90,
 }
 
+LOW_RISK_MESSAGE = "강우량과 수위가 낮아 현재 침수 위험은 낮은 상태입니다."
+LOW_CONFIDENCE_SAFE_MESSAGE = "예보 데이터가 부족하지만 현재 강우량과 수위가 낮아 즉시 위험은 낮습니다."
+
 
 def classify_risk(score: float) -> str:
     if score >= 80:
@@ -42,6 +45,48 @@ def fallback_score(sensor_data: SensorData, drainage_level: float = 100.0) -> in
         + sensor_data.forecast_rainfall * 0.45
     )
     return round(clamp(score))
+
+
+def is_low_observed_risk(payload: RiskForecastRequest) -> bool:
+    return (
+        payload.rainfall < 1
+        and payload.waterLevel < 30
+        and payload.forecastRainfall1h < 10
+        and payload.forecastRainfall2h < 10
+        and payload.forecastRainfall3h < 10
+        and payload.waterLevelRiseRate < 1
+    )
+
+
+def has_low_risk_override_blocker(payload: RiskForecastRequest) -> bool:
+    return (
+        payload.waterLevel >= 60
+        or payload.waterLevelRiseRate >= 3
+        or payload.forecastRainfall1h >= 30
+        or payload.forecastRainfall2h >= 30
+        or payload.forecastRainfall3h >= 30
+    )
+
+
+def is_low_risk_with_untrusted_forecast(payload: RiskForecastRequest) -> bool:
+    source = (payload.source or "").lower()
+    return (
+        payload.rainfall < 1
+        and payload.waterLevel < 40
+        and payload.waterLevelRiseRate <= 0
+        and (payload.forecastStatus == "FAILED" or "fallback" in source)
+    )
+
+
+def has_safety_override_blocker(payload: RiskForecastRequest) -> bool:
+    return (
+        payload.waterLevel >= 60
+        or payload.waterLevelRiseRate >= 3
+        or payload.rainfall >= 20
+        or payload.forecastRainfall1h >= 30
+        or payload.forecastRainfall2h >= 30
+        or payload.forecastRainfall3h >= 30
+    )
 
 
 def predict_sensor_risk(sensor_data: SensorData, model: Any | None = None, drainage_level: float = 100.0) -> RiskPredictionResponse:
@@ -103,15 +148,50 @@ def build_risk_forecast(payload: RiskForecastRequest, model: Any | None = None) 
             )
         )
 
+    low_risk_override = is_low_observed_risk(payload) and not has_low_risk_override_blocker(payload)
+    untrusted_forecast_low_risk = is_low_risk_with_untrusted_forecast(payload) and not has_safety_override_blocker(payload)
+    if low_risk_override:
+        points = [
+            PredictionPoint(
+                time=point.time,
+                risk=min(point.risk, 25),
+                rainfall=point.rainfall,
+                riskLabel="SAFE",
+            )
+            for point in points
+        ]
+        scores = [point.risk for point in points]
+    elif untrusted_forecast_low_risk:
+        points = [
+            PredictionPoint(
+                time=point.time,
+                risk=min(point.risk, 30),
+                rainfall=point.rainfall,
+                riskLabel="SAFE" if min(point.risk, 30) < 25 else "CAUTION",
+            )
+            for point in points
+        ]
+        scores = [point.risk for point in points]
+
     risk_score = max(scores)
+    if low_risk_override:
+        risk_label = "SAFE"
+        message = LOW_RISK_MESSAGE
+    elif untrusted_forecast_low_risk:
+        risk_label = "SAFE" if risk_score < 25 else "CAUTION"
+        message = LOW_CONFIDENCE_SAFE_MESSAGE
+    else:
+        risk_label = classify_risk(risk_score)
+        message = None
     confidence = round(min(0.95, 0.62 + risk_score / 300), 2)
 
     return RiskForecastResponse(
         modelVersion=MODEL_VERSION,
         confidence=confidence,
         riskScore=risk_score,
-        riskLabel=classify_risk(risk_score),
-        reasons=build_reasons(payload, risk_score),
+        riskLabel=risk_label,
+        reasons=[message] if message else build_reasons(payload, risk_score),
+        message=message,
         points=points,
         timestamp=datetime.now().isoformat(),
     )
