@@ -25,6 +25,8 @@ class RiskForecastRequest(BaseModel):
     forecastRainfall1h: float = Field(ge=0)
     forecastRainfall2h: float = Field(ge=0)
     forecastRainfall3h: float = Field(ge=0)
+    forecastStatus: str | None = None
+    source: str | None = None
 
 
 class PredictionPoint(BaseModel):
@@ -40,6 +42,7 @@ class RiskForecastResponse(BaseModel):
     riskScore: int
     riskLabel: RiskLabel
     reasons: list[str]
+    message: str | None = None
     points: list[PredictionPoint]
     timestamp: str
 
@@ -53,6 +56,7 @@ class GenerateAlertRequest(BaseModel):
     waterLevelRiseRate: float = Field(ge=0)
     forecastRainfall1h: float = Field(ge=0)
     source: str | None = None
+    dataStatus: str | None = None
 
 
 class GenerateAlertResponse(BaseModel):

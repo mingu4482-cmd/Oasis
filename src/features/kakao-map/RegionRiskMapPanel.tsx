@@ -1,10 +1,17 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Circle, CustomOverlayMap, Map, useKakaoLoader } from 'react-kakao-maps-sdk';
 import { useNavigate } from 'react-router-dom';
 import { fetchRegionalStatus, LiveStatusResponse, RegionalStatusResponse, RiskLabel } from '../../shared/api/aiApi';
 import { REGION_COORDINATES, findRegionCoordinate } from '../../shared/constants/regionCoordinates';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
+
+declare global {
+  interface Window {
+    kakao: any;
+  }
+}
 
 const RISK_MARKER_COLOR: Record<RiskLabel, string> = {
   SAFE: '#16a34a',
@@ -12,12 +19,20 @@ const RISK_MARKER_COLOR: Record<RiskLabel, string> = {
   WARNING: '#f97316',
   DANGER: '#dc2626',
 };
+const DATA_UNAVAILABLE_COLOR = '#94a3b8';
 
 const RISK_RADIUS: Record<RiskLabel, number> = {
   SAFE: 160,
   CAUTION: 240,
   WARNING: 320,
   DANGER: 420,
+};
+
+const DATA_STATUS_LABEL: Record<string, string> = {
+  REALTIME: '실시간',
+  PARTIAL: '일부 수집',
+  FALLBACK: 'fallback',
+  UNAVAILABLE: '계산 불가',
 };
 
 const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
@@ -39,45 +54,21 @@ interface RegionRiskMapPanelProps {
   height?: string;
 }
 
-export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPanelProps) {
+function useRegionalStatus() {
+  return useQuery({
+    queryKey: ['regional-status'],
+    queryFn: fetchRegionalStatus,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}
+
+function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRiskMapPanelProps & { isKakaoReady: boolean }) {
   const navigate = useNavigate();
-  const kakaoMapKey = import.meta.env.VITE_KAKAO_MAP_KEY ?? '';
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
-  const [regionalStatus, setRegionalStatus] = useState<RegionalStatusResponse | null>(null);
   const [activeInfoRegion, setActiveInfoRegion] = useState(selectedRegion);
-  const [dataError, setDataError] = useState('');
-  const [kakaoLoading, kakaoError] = useKakaoLoader({
-    appkey: kakaoMapKey,
-    libraries: ['services', 'clusterer'],
-  });
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadRegionalStatus = async () => {
-      try {
-        const data = await fetchRegionalStatus();
-        if (isMounted) {
-          setRegionalStatus(data);
-          setDataError('');
-        }
-      } catch (error) {
-        console.error('Failed to fetch regional map status:', error);
-        if (isMounted) {
-          setDataError('지역별 위험도 데이터를 불러오지 못했습니다.');
-        }
-      }
-    };
-
-    loadRegionalStatus();
-    const interval = window.setInterval(loadRegionalStatus, 30000);
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(interval);
-    };
-  }, []);
+  const { data: regionalStatus, isFetching, isError } = useRegionalStatus();
 
   useEffect(() => {
     setActiveInfoRegion(selectedRegion);
@@ -92,7 +83,7 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
           ...coordinate,
           status,
           riskLabel,
-          markerColor: RISK_MARKER_COLOR[riskLabel],
+          markerColor: status?.dataStatus === 'FALLBACK' || status?.dataStatus === 'UNAVAILABLE' ? DATA_UNAVAILABLE_COLOR : RISK_MARKER_COLOR[riskLabel],
           radius: RISK_RADIUS[riskLabel],
         };
       }),
@@ -101,7 +92,6 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
 
   const center = findRegionCoordinate(selectedRegion);
   const activeItem = regionItems.find((item) => item.name === activeInfoRegion) ?? regionItems[0];
-  const hasMapKey = Boolean(kakaoMapKey);
 
   const selectRegion = (regionName: string) => {
     setSelectedRegion(regionName);
@@ -113,12 +103,12 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
     navigate(`/risk-analysis?region=${encodeURIComponent(regionName)}`);
   };
 
-  if (!hasMapKey) {
+  if (!isKakaoReady) {
     return (
       <section className={`map-surface region-risk-map ${className}`} style={height ? { height } : undefined}>
         <div className="region-map-fallback">
-          <strong>카카오 지도 키가 설정되지 않았습니다</strong>
-          <span>.env.local에 VITE_KAKAO_MAP_KEY를 설정하면 지역별 위험도 지도가 표시됩니다.</span>
+          <strong>지도 SDK를 불러오는 중입니다.</strong>
+          <span>지역별 위험도 데이터는 아래 목록에서 먼저 확인할 수 있습니다.</span>
           <div className="region-fallback-list">
             {regionItems.map((item) => (
               <button
@@ -133,27 +123,6 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
               </button>
             ))}
           </div>
-        </div>
-      </section>
-    );
-  }
-
-  if (kakaoLoading) {
-    return (
-      <section className={`map-surface region-risk-map ${className}`} style={height ? { height } : undefined}>
-        <div className="region-map-fallback">
-          <strong>지도 로딩 중입니다.</strong>
-        </div>
-      </section>
-    );
-  }
-
-  if (kakaoError) {
-    return (
-      <section className={`map-surface region-risk-map ${className}`} style={height ? { height } : undefined}>
-        <div className="region-map-fallback">
-          <strong>카카오 지도 키가 설정되지 않았습니다</strong>
-          <span>지도 SDK를 불러오지 못했습니다. 키와 도메인 설정을 확인하세요.</span>
         </div>
       </section>
     );
@@ -195,13 +164,20 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
                 <span style={{ background: activeItem.markerColor }}>{activeItem.riskLabel}</span>
               </div>
               <div className="region-info-grid">
-                <span>위험도 점수</span>
+                <span>위험 점수</span>
                 <strong>{activeItem.status?.riskScore ?? 0}%</strong>
                 <span>강우량</span>
                 <strong>{formatNumber(activeItem.status?.rainfall, 'mm')}</strong>
                 <span>하수관로 수위</span>
                 <strong>{formatNumber(activeItem.status?.waterLevel, '%')}</strong>
               </div>
+              {activeItem.status?.dataStatus === 'PARTIAL' ? (
+                <p className="model-label">일부 데이터가 수집되지 않아 분석 신뢰도가 낮습니다.</p>
+              ) : null}
+              {activeItem.status?.dataStatus === 'FALLBACK' || activeItem.status?.dataStatus === 'UNAVAILABLE' ? (
+                <p className="model-label">해당 지역은 현재 실시간 데이터가 부족하여 AI 위험도 분석을 제공할 수 없습니다.</p>
+              ) : null}
+              {activeItem.status?.dataStatus === 'REALTIME' ? <p className="model-label">실시간 API 기반 분석</p> : null}
               <button type="button" className="region-info-action" onClick={() => openRiskAnalysis(activeItem.name)}>
                 상세 분석 보기
               </button>
@@ -216,7 +192,48 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
         <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.WARNING }} />WARNING</span>
         <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.DANGER }} />DANGER</span>
       </div>
-      {dataError ? <div className="region-map-error">{dataError}</div> : null}
+      {isFetching ? <div className="region-map-error">데이터 갱신 중</div> : null}
+      {isError ? <div className="region-map-error">지역별 위험도 데이터를 불러오지 못했습니다.</div> : null}
     </section>
   );
+}
+
+function RegionRiskMapWithLoader(props: RegionRiskMapPanelProps) {
+  const kakaoMapKey = import.meta.env.VITE_KAKAO_MAP_KEY ?? '';
+  const [kakaoLoading, kakaoError] = useKakaoLoader({
+    appkey: kakaoMapKey,
+    libraries: ['services', 'clusterer'],
+  });
+
+  if (!kakaoMapKey) {
+    return (
+      <section className={`map-surface region-risk-map ${props.className ?? ''}`} style={props.height ? { height: props.height } : undefined}>
+        <div className="region-map-fallback">
+          <strong>카카오 지도 키가 설정되지 않았습니다.</strong>
+          <span>.env.local의 VITE_KAKAO_MAP_KEY를 확인하세요.</span>
+        </div>
+      </section>
+    );
+  }
+
+  if (kakaoError) {
+    return (
+      <section className={`map-surface region-risk-map ${props.className ?? ''}`} style={props.height ? { height: props.height } : undefined}>
+        <div className="region-map-fallback">
+          <strong>카카오 지도를 불러오지 못했습니다.</strong>
+          <span>지도 SDK 설정을 확인하세요.</span>
+        </div>
+      </section>
+    );
+  }
+
+  return <RegionRiskMapContent {...props} isKakaoReady={!kakaoLoading} />;
+}
+
+export function RegionRiskMapPanel(props: RegionRiskMapPanelProps) {
+  if (typeof window !== 'undefined' && window.kakao?.maps) {
+    return <RegionRiskMapContent {...props} isKakaoReady />;
+  }
+
+  return <RegionRiskMapWithLoader {...props} />;
 }

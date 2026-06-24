@@ -9,6 +9,7 @@ export interface RiskPredictionPayload {
 }
 
 export type RiskLabel = 'SAFE' | 'CAUTION' | 'WARNING' | 'DANGER';
+export type DataStatus = 'REALTIME' | 'PARTIAL' | 'FALLBACK' | 'UNAVAILABLE';
 
 export interface RiskPredictionResponse {
   riskLevel: number;
@@ -26,12 +27,17 @@ export type RiskForecastResponse =
       hasData: true;
       timestamp?: string;
       source?: string;
+      dataStatus?: DataStatus;
+      dataStatusMessage?: string;
+      message?: string | null;
+      reasons?: string[];
+      forecastStatus?: 'OK' | 'FAILED' | string | null;
       targetAreaName?: string;
       region?: string;
       riskScore?: number;
       riskLabel?: RiskLabel;
     })
-  | { hasData: false; message: string; source: string; timestamp: null; points?: [] };
+  | { hasData: false; message: string; source: string; timestamp: null; dataStatus?: DataStatus; points?: [] };
 
 export async function fetchRiskForecast(region?: string) {
   const response = await apiClient.get<RiskForecastResponse>('/risk-forecast', {
@@ -57,11 +63,16 @@ export interface LiveStatusResponse {
   forecastRainfall1h?: number;
   forecastRainfall2h?: number;
   forecastRainfall3h?: number;
+  forecastStatus?: 'OK' | 'FAILED' | string | null;
   riskScore?: number;
   riskLabel?: RiskLabel;
   confidence?: number;
   points?: RiskForecastPoint[];
   source?: string;
+  dataStatus?: DataStatus;
+  dataStatusMessage?: string;
+  message?: string | null;
+  reasons?: string[];
   timestamp?: string;
   rainfallStation?: string;
   rainfallObservedAt?: string;
@@ -87,6 +98,7 @@ export interface GenerateAlertRequest {
   waterLevelRiseRate: number;
   forecastRainfall1h: number;
   source?: string;
+  dataStatus?: DataStatus;
 }
 
 export interface GenerateAlertResponse {
