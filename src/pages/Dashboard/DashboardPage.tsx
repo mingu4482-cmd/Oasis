@@ -64,7 +64,7 @@ export function DashboardPage() {
   const lastUpdated = highestRiskRegion?.timestamp ?? regionalStatus?.timestamp;
 
   return (
-    <AppShell>
+    <>
       <div className="dashboard-layout">
         <section className="overview-strip">
           <MetricTile label="현재 선택 지역" value={selectedRegion} icon={<MapPin size={18} />} />
@@ -147,6 +147,6 @@ export function DashboardPage() {
           </aside>
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }

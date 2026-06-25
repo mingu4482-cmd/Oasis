@@ -1,7 +1,6 @@
 import { Activity, AlertTriangle, CloudRain, MapPin, Waves } from 'lucide-react';
-import { useState } from 'react';
-import { RegionRiskMapPanel } from '../../features/kakao-map/RegionRiskMapPanel';
-import { AppShell } from '../../shared/components/AppShell';
+import React, { useEffect, useState } from 'react';
+import { Map, Circle } from 'react-kakao-maps-sdk'; // 🌟 카카오맵 SDK 추가
 import { REGION_COORDINATES } from '../../shared/constants/regionCoordinates';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
 
@@ -14,6 +13,15 @@ const CONTROL_LAYERS = [
 type LayerId = (typeof CONTROL_LAYERS)[number]['id'];
 type LayerVisibility = Record<LayerId, boolean>;
 
+// 🌟 백엔드 데이터용 인터페이스
+interface Manhole {
+    locationId: number;
+    name: string;
+    latitude: number;
+    longitude: number;
+    waterLevel: number;
+}
+
 export const MapViewPage = () => {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
@@ -23,6 +31,31 @@ export const MapViewPage = () => {
     rainfall: true,
   });
 
+  // 🌟 동생이 만든 실시간 벡엔드 연동 로직
+  const [manholes, setManholes] = useState<Manhole[]>([]);
+  useEffect(() => {
+      const fetchData = async () => {
+          try {
+              const response = await fetch('http://localhost:8080/api/manholes');
+              if (!response.ok) throw new Error('API 서버 연결 안 됨');
+              const data: Manhole[] = await response.json();
+              const validData = data.filter(m => m.latitude !== 0 && m.latitude !== null);
+              setManholes(validData);
+          } catch (e) {
+              console.error("🚨 백엔드 연결 실패!", e);
+          }
+      };
+      fetchData();
+      const interval = setInterval(fetchData, 60000);
+      return () => clearInterval(interval);
+  }, []);
+
+  const getHeatmapColor = (waterLevel: number) => {
+      if (waterLevel >= 90) return '#ef4444';
+      if (waterLevel >= 60) return '#f59e0b';
+      return '#10b981';
+  };
+
   const toggleLayer = (layerId: LayerId) => {
     setLayerVisibility((current) => ({
       ...current,
@@ -31,7 +64,8 @@ export const MapViewPage = () => {
   };
 
   return (
-    <AppShell>
+    // 🌟 중복되던 AppShell 제거 (Router에서 관리함)
+    <>
       <div className="page-layout map-view-page">
         <section className="panel page-hero-panel map-view-hero">
           <div>
@@ -88,16 +122,40 @@ export const MapViewPage = () => {
               <AlertTriangle size={16} />
               <span>서울시 강우량, 서울시 하수관로, 기상청 단기예보 데이터를 기반으로 표시됩니다.</span>
             </div>
-
             <div className="control-panel-note map-coordinate-note">
               <MapPin size={16} />
               <span>※ 지도 마커는 자치구별 위험도를 표시하기 위한 대표 위치 기준이며, 실제 침수 발생 지점을 의미하지 않습니다.</span>
             </div>
           </aside>
 
-          <RegionRiskMapPanel className="full-region-risk-map control-map-surface" height="calc(100vh - 238px)" layerVisibility={layerVisibility} />
+          {/* 🌟 동생의 실시간 카카오 히트맵을 팀원 UI 공간에 렌더링! */}
+          <div className="full-region-risk-map control-map-surface" style={{ width: '100%', height: 'calc(100vh - 238px)', borderRadius: '12px', overflow: 'hidden' }}>
+              <Map center={{ lat: 37.5665, lng: 126.9780 }} style={{ width: "100%", height: "100%" }} level={8}>
+                  {/* 좌측 패널의 '하수관로 수위' 버튼이 켜져있을 때만 히트맵 표시 연동! */}
+                  {layerVisibility.waterLevel && manholes
+                      .filter((m) => m.waterLevel >= 30)
+                      .map((m) => {
+                          const zoneColor = getHeatmapColor(m.waterLevel);
+                          return (
+                              <Circle
+                                  key={`zone-${m.locationId}`}
+                                  center={{ lat: m.latitude, lng: m.longitude }}
+                                  radius={400}
+                                  strokeWeight={1}
+                                  strokeColor={zoneColor}
+                                  strokeOpacity={0.2}
+                                  fillColor={zoneColor}
+                                  fillOpacity={0.15}
+                              />
+                          );
+                      })}
+              </Map>
+          </div>
+
         </div>
       </div>
-    </AppShell>
+    </>
   );
 };
+
+export default MapViewPage;
