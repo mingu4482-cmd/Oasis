@@ -161,7 +161,9 @@ Express API 게이트웨이입니다.
   - 자동차/도보 경로 안내
 - `MapView/MapViewPage.tsx`
   - `VITE_KAKAO_MAP_KEY`와 `useKakaoLoader` 기반 통합 지도 화면
-  - 센서 위치, 위험 반경, 선택 지역 정보를 지도에 표시
+  - 자치구 대표 좌표 기준 지역별 위험도 마커, 위험 반경, 선택 지역 정보를 지도에 표시
+  - 현재는 구 단위 위험도 모니터링 목적이며, 마커 위치는 실제 침수 발생 지점 또는 하수관로 센서 위치가 아님
+  - 향후 하수관로 센서 좌표 또는 침수 취약 지점 좌표 기반으로 고도화 가능
 - `DigitalTwin/DigitalTwinPage.tsx`
   - 침수 깊이 시각화 화면
 - `AlertCenter/AlertCenterPage.tsx`
@@ -275,4 +277,3 @@ FastAPI:
 - `GET /health`
 - `POST /predict`
 - `POST /generate-alert`
-

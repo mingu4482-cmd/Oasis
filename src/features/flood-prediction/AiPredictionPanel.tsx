@@ -187,6 +187,46 @@ export function AiPredictionPanel({ children }: AiPredictionPanelProps) {
         </div>
       </div>
 
+      <div className="risk-explain-grid">
+        <div className="ai-result-box risk-analysis-card risk-evidence-card">
+          <span>위험도 산정 근거</span>
+          <div className="risk-evidence-list">
+            {assessmentItems.map((item) => (
+              <div className="risk-evidence-row" key={item.label}>
+                <span>{item.label}</span>
+                <strong>
+                  {item.value} → <em className={`risk-evidence-tone ${item.tone}`}>{item.assessment}</em>
+                </strong>
+              </div>
+            ))}
+          </div>
+          <div className="risk-judgment-box">
+            <span>최종 판단</span>
+            <p>{finalJudgment}</p>
+          </div>
+          {isLowConfidence ? (
+            <div className="risk-confidence-note">일부 데이터가 보정되어 산정 근거의 정확도가 낮을 수 있습니다.</div>
+          ) : null}
+        </div>
+
+        <div className="ai-result-box risk-analysis-card risk-contribution-card">
+          <span>입력값별 위험 수준</span>
+          <div className="risk-contribution-list">
+            {contributionItems.map((item) => (
+              <div className="risk-contribution-row" key={item.label}>
+                <div>
+                  <span>{item.label}</span>
+                  <strong>{item.rawValue} / {item.metricLabel} {item.value}%</strong>
+                </div>
+                <div className="risk-contribution-track" aria-hidden="true">
+                  <div className="risk-contribution-fill" style={{ width: `${Math.min(item.value, 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {liveStatusQuery.isFetching ? <div className="ai-prediction-error">데이터 갱신 중</div> : null}
       {!liveData?.hasData && !liveStatusQuery.isFetching ? (
         <div className="ai-prediction-error">아직 수집된 실시간 위험도 데이터가 없습니다.</div>
