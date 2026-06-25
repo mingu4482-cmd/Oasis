@@ -31,7 +31,11 @@ const formatTimestamp = (timestamp?: string) => {
   });
 };
 
-export function RiskPredictionChart() {
+interface RiskPredictionChartProps {
+  embedded?: boolean;
+}
+
+export function RiskPredictionChart({ embedded = false }: RiskPredictionChartProps) {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const liveStatusQuery = useLiveStatusQuery(selectedRegion);
   const liveStatus = liveStatusQuery.data;
@@ -60,13 +64,10 @@ export function RiskPredictionChart() {
 
   const displayRisk = activePrediction.riskScore ?? liveStatus?.riskScore ?? 0;
 
-  const chartMode = forecastQuery.data?.hasData ? '실시간 지역 모니터링 모드' : '실시간 대기 모드';
-
-  return (
-    <section className="panel">
+  const chartContent = (
+    <>
       <div className="panel-heading">
         <div>
-          <span className="eyebrow">{chartMode}</span>
           <h2>1~3시간 침수 위험도</h2>
         </div>
         <div className="chart-risk-summary">
@@ -106,6 +107,16 @@ export function RiskPredictionChart() {
         분석 지역 {selectedRegion} · 종합 위험도 기준 · {activePrediction.modelVersion} · 데이터 출처: {activePrediction.source ?? liveStatus?.source ?? '대기 중'} · 마지막 업데이트:{' '}
         {formatTimestamp(activePrediction.timestamp)}
       </p>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="embedded-risk-chart">{chartContent}</div>;
+  }
+
+  return (
+    <section className="panel">
+      {chartContent}
     </section>
   );
 }

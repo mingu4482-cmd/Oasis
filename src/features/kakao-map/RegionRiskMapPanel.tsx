@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Circle, CustomOverlayMap, Map, useKakaoLoader } from 'react-kakao-maps-sdk';
+import { CustomOverlayMap, Map as KakaoMap, Polygon, useKakaoLoader } from 'react-kakao-maps-sdk';
 import { useNavigate } from 'react-router-dom';
 import { fetchRegionalStatus, LiveStatusResponse, RegionalStatusResponse, RiskLabel } from '../../shared/api/aiApi';
 import { REGION_COORDINATES, findRegionCoordinate } from '../../shared/constants/regionCoordinates';
+import { SEOUL_DISTRICT_BOUNDARIES } from '../../shared/constants/seoulDistrictBoundaries';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
 
 declare global {
@@ -20,13 +21,6 @@ const RISK_MARKER_COLOR: Record<RiskLabel, string> = {
   DANGER: '#dc2626',
 };
 const DATA_UNAVAILABLE_COLOR = '#94a3b8';
-
-const RISK_RADIUS: Record<RiskLabel, number> = {
-  SAFE: 160,
-  CAUTION: 240,
-  WARNING: 320,
-  DANGER: 420,
-};
 
 const DATA_STATUS_LABEL: Record<string, string> = {
   REALTIME: '실시간',
@@ -48,6 +42,7 @@ const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
 };
 
 const formatNumber = (value: number | undefined, unit: string) => (typeof value === 'number' ? `${value}${unit}` : '-');
+const DISTRICT_BOUNDARY_MAP = new Map(SEOUL_DISTRICT_BOUNDARIES.map((boundary) => [boundary.name, boundary.paths]));
 
 interface RegionRiskMapPanelProps {
   className?: string;
@@ -67,12 +62,8 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRi
   const navigate = useNavigate();
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
-  const [activeInfoRegion, setActiveInfoRegion] = useState(selectedRegion);
+  const [activeInfoRegion, setActiveInfoRegion] = useState<string | null>(null);
   const { data: regionalStatus, isFetching, isError } = useRegionalStatus();
-
-  useEffect(() => {
-    setActiveInfoRegion(selectedRegion);
-  }, [selectedRegion]);
 
   const regionItems = useMemo(
     () =>
@@ -81,21 +72,20 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRi
         const riskLabel = toRiskLabel(status);
         return {
           ...coordinate,
+          boundaryPaths: DISTRICT_BOUNDARY_MAP.get(coordinate.name) ?? [],
           status,
           riskLabel,
           markerColor: status?.dataStatus === 'FALLBACK' || status?.dataStatus === 'UNAVAILABLE' ? DATA_UNAVAILABLE_COLOR : RISK_MARKER_COLOR[riskLabel],
-          radius: RISK_RADIUS[riskLabel],
         };
       }),
     [regionalStatus],
   );
 
   const center = findRegionCoordinate(selectedRegion);
-  const activeItem = regionItems.find((item) => item.name === activeInfoRegion) ?? regionItems[0];
+  const activeItem = activeInfoRegion ? regionItems.find((item) => item.name === activeInfoRegion) : null;
 
   const selectRegion = (regionName: string) => {
     setSelectedRegion(regionName);
-    setActiveInfoRegion(regionName);
   };
 
   const openRiskAnalysis = (regionName: string) => {
@@ -130,23 +120,31 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRi
 
   return (
     <section className={`map-surface region-risk-map ${className}`} style={height ? { height } : undefined} aria-label="지역별 침수 위험도 지도">
-      <Map center={{ lat: center.lat, lng: center.lng }} isPanto level={8} style={{ width: '100%', height: '100%' }}>
+      <KakaoMap center={{ lat: center.lat, lng: center.lng }} isPanto level={8} style={{ width: '100%', height: '100%' }}>
         {regionItems.map((item) => (
           <Fragment key={item.name}>
-            <Circle
-              center={{ lat: item.lat, lng: item.lng }}
-              radius={item.radius}
-              strokeWeight={1}
-              strokeColor={item.markerColor}
-              strokeOpacity={0.55}
-              fillColor={item.markerColor}
-              fillOpacity={item.name === selectedRegion ? 0.22 : 0.12}
-            />
+            {item.boundaryPaths.map((path, pathIndex) => (
+              <Polygon
+                key={`${item.name}-${pathIndex}`}
+                path={path}
+                strokeWeight={item.name === activeInfoRegion || item.name === selectedRegion ? 3 : 2}
+                strokeColor={item.markerColor}
+                strokeOpacity={item.name === activeInfoRegion ? 0.95 : 0}
+                fillColor={item.markerColor}
+                fillOpacity={item.name === activeInfoRegion ? 0.24 : 0}
+                zIndex={item.name === activeInfoRegion || item.name === selectedRegion ? 5 : 1}
+                onMouseover={() => setActiveInfoRegion(item.name)}
+                onMouseout={() => setActiveInfoRegion(null)}
+                onClick={() => selectRegion(item.name)}
+              />
+            ))}
             <CustomOverlayMap position={{ lat: item.lat, lng: item.lng }} clickable yAnchor={0.9} zIndex={item.name === selectedRegion ? 4 : 2}>
               <button
                 type="button"
-                className={item.name === selectedRegion ? 'region-risk-marker active' : 'region-risk-marker'}
+                className={item.name === activeInfoRegion || item.name === selectedRegion ? 'region-risk-marker active' : 'region-risk-marker'}
                 style={{ '--marker-color': item.markerColor } as CSSProperties}
+                onMouseEnter={() => setActiveInfoRegion(item.name)}
+                onMouseLeave={() => setActiveInfoRegion(null)}
                 onClick={() => selectRegion(item.name)}
               >
                 <span>{item.name}</span>
@@ -158,7 +156,11 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRi
 
         {activeItem ? (
           <CustomOverlayMap position={{ lat: activeItem.lat, lng: activeItem.lng }} clickable yAnchor={1.15} zIndex={10}>
-            <div className="region-info-window">
+            <div
+              className="region-info-window"
+              onMouseEnter={() => setActiveInfoRegion(activeItem.name)}
+              onMouseLeave={() => setActiveInfoRegion(null)}
+            >
               <div className="region-info-heading">
                 <strong>{activeItem.name}</strong>
                 <span style={{ background: activeItem.markerColor }}>{activeItem.riskLabel}</span>
@@ -184,7 +186,7 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRi
             </div>
           </CustomOverlayMap>
         ) : null}
-      </Map>
+      </KakaoMap>
 
       <div className="map-legend region-risk-legend">
         <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.SAFE }} />SAFE</span>

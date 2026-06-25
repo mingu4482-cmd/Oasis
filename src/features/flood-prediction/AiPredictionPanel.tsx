@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
+import { CSSProperties, ReactNode, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Gauge } from 'lucide-react';
 import { LiveStatusResponse, RiskLabel, fetchLiveStatus, fetchRegions } from '../../shared/api/aiApi';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
 
@@ -48,6 +47,11 @@ const formatTimestamp = (timestamp?: string | null) => {
 
 const formatValue = (value: number | undefined, unit: string) => (typeof value === 'number' ? `${value}${unit}` : '-');
 
+const toMetricPercent = (value: number | undefined, max: number) => {
+  if (typeof value !== 'number') return 0;
+  return Math.max(0, Math.min(100, (value / max) * 100));
+};
+
 export function useLiveStatusQuery(region: string) {
   return useQuery<LiveStatusResponse>({
     queryKey: liveStatusQueryKey(region),
@@ -56,7 +60,11 @@ export function useLiveStatusQuery(region: string) {
   });
 }
 
-export function AiPredictionPanel() {
+interface AiPredictionPanelProps {
+  children?: ReactNode;
+}
+
+export function AiPredictionPanel({ children }: AiPredictionPanelProps) {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
 
@@ -79,9 +87,23 @@ export function AiPredictionPanel() {
   const riskLabel = liveData?.hasData ? toRiskLabel(liveData.riskLabel, riskScore) : null;
   const risk = riskLabel ? riskMeta[riskLabel] : null;
   const isUnavailable = liveData?.dataStatus === 'FALLBACK' || liveData?.dataStatus === 'UNAVAILABLE';
+  const displayRiskScore = isUnavailable ? 0 : riskScore;
+  const riskGaugeStyle = { '--risk-score': `${displayRiskScore}%` } as CSSProperties;
   const liveWarnings = Array.from(
     new Set([...(liveData?.warnings ?? []), liveData?.fallbackReason].filter(Boolean) as string[]),
   );
+  const monitoringMetrics = [
+    { label: '강우량', value: liveData?.rainfall, unit: 'mm', percent: toMetricPercent(liveData?.rainfall, 80) },
+    { label: '하수관로 수위', value: liveData?.waterLevel, unit: '%', percent: toMetricPercent(liveData?.waterLevel, 100) },
+    { label: '배수 상태', value: liveData?.drainageLevel, unit: '%', percent: toMetricPercent(liveData?.drainageLevel, 100) },
+    { label: '상승 속도', value: liveData?.waterLevelRiseRate, unit: 'm/h', percent: toMetricPercent(liveData?.waterLevelRiseRate, 2) },
+  ];
+  const forecastBars = [
+    { label: '+1h', value: liveData?.forecastRainfall1h },
+    { label: '+2h', value: liveData?.forecastRainfall2h },
+    { label: '+3h', value: liveData?.forecastRainfall3h },
+  ];
+  const forecastMax = Math.max(10, ...forecastBars.map((bar) => (typeof bar.value === 'number' ? bar.value : 0)));
 
   return (
     <section className="panel ai-prediction-panel">
@@ -90,7 +112,10 @@ export function AiPredictionPanel() {
           <span className="eyebrow">실시간 지역 모니터링</span>
           <h2>AI 침수 위험 결과</h2>
         </div>
-        <Gauge size={22} />
+        <div className="panel-updated-at">
+          <span>마지막 업데이트</span>
+          <strong>{formatTimestamp(liveData?.timestamp)}</strong>
+        </div>
       </div>
 
       <label className="region-select-field">
@@ -104,45 +129,60 @@ export function AiPredictionPanel() {
         </select>
       </label>
 
-      <div className="risk-analysis-grid">
-        <div className="ai-result-box risk-analysis-card">
-          <span>실시간 수집값</span>
-          <div className="live-metric-grid">
-            <strong>강우량 {liveData?.hasData ? formatValue(liveData.rainfall, 'mm') : '-'}</strong>
-            <strong>하수관로 수위 {liveData?.hasData ? formatValue(liveData.waterLevel, '%') : '-'}</strong>
-            <strong>배수 상태 {liveData?.hasData ? formatValue(liveData.drainageLevel, '%') : '-'}</strong>
-            <strong>상승 속도 {liveData?.hasData ? formatValue(liveData.waterLevelRiseRate, 'm/h') : '-'}</strong>
-            <strong>+1h {liveData?.hasData ? formatValue(liveData.forecastRainfall1h, 'mm') : '-'}</strong>
-            <strong>+2h {liveData?.hasData ? formatValue(liveData.forecastRainfall2h, 'mm') : '-'}</strong>
-            <strong>+3h {liveData?.hasData ? formatValue(liveData.forecastRainfall3h, 'mm') : '-'}</strong>
-          </div>
-        </div>
-
-        <div className="ai-result-box risk-analysis-card">
-          <span>AI 예측 결과</span>
-          <div className="risk-score-row">
+      <div className="monitoring-overview">
+        <div className="risk-hero-card">
+          <div className="risk-hero-copy">
+            <span>AI 예측 결과</span>
             <strong>{isUnavailable ? '-' : `${riskScore}%`}</strong>
             {risk && !isUnavailable ? (
-              <strong className={`ai-risk-badge ${risk.className}`}>{risk.label}</strong>
+              <em className={`risk-status-pill ${risk.className}`}>{risk.label}</em>
             ) : (
-              <strong className="ai-risk-placeholder">데이터 부족</strong>
+              <em className="risk-status-pill muted">데이터 부족</em>
             )}
           </div>
-          {liveData?.message ? <p className="model-label">{liveData.message}</p> : null}
+          <div className="risk-hero-rail" aria-hidden="true">
+            <span style={riskGaugeStyle} />
+          </div>
+          <div className="risk-hero-scale">
+            <span>안정</span>
+            <span>주의</span>
+            <span>경계</span>
+            <span>위험</span>
+          </div>
+          {liveData?.message ? <p>{liveData.message}</p> : null}
         </div>
 
-        <div className="ai-result-box risk-analysis-card data-basis-card">
-          <span>데이터 기준 정보</span>
-          <div>
-            <div>분석 기준 위치: {liveData?.targetAreaName ?? selectedRegion}</div>
-            <div>강우 관측: {liveData?.rainfallStation ?? '-'} / {liveData?.rainfallObservedAt ?? '-'}</div>
-            <div>하수관로 관측: {liveData?.drainpipeStation ?? '-'} / {liveData?.drainpipeMeasuredAt ?? '-'}</div>
-            <div>
-              예보 격자: nx {liveData?.forecastGrid?.nx ?? '-'}, ny {liveData?.forecastGrid?.ny ?? '-'}
+        <div className="monitoring-metric-grid">
+          {monitoringMetrics.map((metric) => (
+            <div key={metric.label} className="monitoring-metric-card">
+              <span>{metric.label}</span>
+              <strong>{liveData?.hasData ? formatValue(metric.value, metric.unit) : '-'}</strong>
+              <div className="monitoring-meter" aria-hidden="true">
+                <i style={{ width: `${liveData?.hasData ? metric.percent : 0}%` }} />
+              </div>
             </div>
-            <div>데이터 상태: {DATA_STATUS_LABEL[liveData?.dataStatus ?? 'UNAVAILABLE'] ?? '-'}</div>
-            <div>데이터 출처: {liveData?.source ?? 'realtime api waiting'}</div>
-            <div>마지막 업데이트: {formatTimestamp(liveData?.timestamp)}</div>
+          ))}
+        </div>
+
+        <div className="forecast-summary-card">
+          <div className="forecast-summary-heading">
+            <span>예보 강수량</span>
+            <strong>향후 3시간</strong>
+          </div>
+          <div className="forecast-summary-bars">
+            {forecastBars.map((bar) => {
+              const value = typeof bar.value === 'number' ? bar.value : 0;
+              const width = liveData?.hasData ? Math.max(4, Math.round((value / forecastMax) * 100)) : 0;
+              return (
+                <div key={bar.label} className="forecast-summary-row">
+                  <span>{bar.label}</span>
+                  <div aria-hidden="true">
+                    <i style={{ width: `${width}%` }} />
+                  </div>
+                  <strong>{liveData?.hasData ? formatValue(bar.value, 'mm') : '-'}</strong>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -157,7 +197,6 @@ export function AiPredictionPanel() {
       {isUnavailable ? (
         <div className="ai-prediction-error">해당 지역은 현재 실시간 데이터가 부족하여 AI 위험도 분석을 제공할 수 없습니다.</div>
       ) : null}
-      {liveData?.dataStatus === 'REALTIME' ? <div className="model-label">실시간 API 기반 분석</div> : null}
       {liveWarnings.length ? (
         <div className="ai-prediction-error">
           {liveWarnings.map((warning) => (
@@ -165,6 +204,7 @@ export function AiPredictionPanel() {
           ))}
         </div>
       ) : null}
+      {children}
     </section>
   );
 }
