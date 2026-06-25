@@ -22,6 +22,13 @@ const RISK_MARKER_COLOR: Record<RiskLabel, string> = {
 };
 const DATA_UNAVAILABLE_COLOR = '#94a3b8';
 
+const RISK_LABEL_KO: Record<RiskLabel, string> = {
+  SAFE: '안전',
+  CAUTION: '관심',
+  WARNING: '주의',
+  DANGER: '위험',
+};
+
 const DATA_STATUS_LABEL: Record<string, string> = {
   REALTIME: '실시간',
   PARTIAL: '일부 수집',
@@ -146,7 +153,7 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
   return (
     <section className={`map-surface region-risk-map ${className}`} style={height ? { height } : undefined} aria-label="지역별 침수 위험도 지도">
       <KakaoMap center={{ lat: center.lat, lng: center.lng }} isPanto level={8} style={{ width: '100%', height: '100%' }}>
-        {regionItems.map((item) => (
+        {layers.regionalRisk ? regionItems.map((item) => (
           <Fragment key={item.name}>
             {item.boundaryPaths.map((path, pathIndex) => (
               <Polygon
@@ -179,59 +186,57 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
           </Fragment>
         )) : null}
 
-        {activeItem && layers.regionalRisk ? (
-          <CustomOverlayMap position={{ lat: activeItem.lat, lng: activeItem.lng }} clickable yAnchor={1.15} zIndex={10}>
-            <div
-              className="region-info-window"
-              onMouseEnter={() => setActiveInfoRegion(activeItem.name)}
-              onMouseLeave={() => setActiveInfoRegion(null)}
-            >
-              <div className="region-info-heading">
-                <strong>{activeItem.name}</strong>
-                <span style={{ background: activeItem.markerColor }}>{RISK_LABEL_KO[activeItem.riskLabel]}</span>
-              </div>
-              <p className="region-info-position-note">표시 위치: 자치구 대표 좌표</p>
-              <div className="region-info-grid">
-                <span>위험도 점수</span>
-                <strong>{activeItem.status?.riskScore ?? 0}%</strong>
-                <span>위험도 등급</span>
-                <strong>{activeItem.riskLabel}</strong>
-                {layers.rainfall ? (
-                  <>
-                    <span>강우량</span>
-                    <strong>{formatNumber(activeItem.status?.rainfall, 'mm')}</strong>
-                  </>
-                ) : null}
-                {layers.waterLevel ? (
-                  <>
-                    <span>하수관로 수위</span>
-                    <strong>{formatNumber(activeItem.status?.waterLevel, '%')}</strong>
-                  </>
-                ) : null}
-                <span>예보 강수량</span>
-                <strong>{formatForecastRainfall(activeItem.status)}</strong>
-                <span>데이터 출처</span>
-                <strong>{activeItem.status?.source ?? DATA_STATUS_LABEL[activeItem.status?.dataStatus ?? 'UNAVAILABLE'] ?? '-'}</strong>
-              </div>
-              <div className="region-info-actions">
-                <button type="button" className="region-info-action" onClick={() => openRiskAnalysis(activeItem.name)}>
-                  AI 상세 분석 보기
-                </button>
-                <button type="button" className="region-info-action secondary" onClick={() => openSafeRoute(activeItem.name)}>
-                  주변 대피소/안전 경로 보기
-                </button>
-              </div>
-            </div>
-          </CustomOverlayMap>
-        ) : null}
       </KakaoMap>
 
+      {activeItem && layers.regionalRisk ? (
+        <div
+          className="region-info-window region-info-floating"
+          onMouseEnter={() => setActiveInfoRegion(activeItem.name)}
+          onMouseLeave={() => setActiveInfoRegion(null)}
+        >
+          <div className="region-info-heading">
+            <strong>{activeItem.name}</strong>
+            <span style={{ background: activeItem.markerColor }}>{RISK_LABEL_KO[activeItem.riskLabel]}</span>
+          </div>
+          <div className="region-info-grid">
+            <span>위험도 점수</span>
+            <strong>{activeItem.status?.riskScore ?? 0}%</strong>
+            <span>위험도 등급</span>
+            <strong>{activeItem.riskLabel}</strong>
+            {layers.rainfall ? (
+              <>
+                <span>강우량</span>
+                <strong>{formatNumber(activeItem.status?.rainfall, 'mm')}</strong>
+              </>
+            ) : null}
+            {layers.waterLevel ? (
+              <>
+                <span>하수관로 수위</span>
+                <strong>{formatNumber(activeItem.status?.waterLevel, '%')}</strong>
+              </>
+            ) : null}
+            <span>예보 강수량</span>
+            <strong>{formatForecastRainfall(activeItem.status)}</strong>
+            <span>데이터 출처</span>
+            <strong>{activeItem.status?.source ?? DATA_STATUS_LABEL[activeItem.status?.dataStatus ?? 'UNAVAILABLE'] ?? '-'}</strong>
+          </div>
+          <div className="region-info-actions">
+            <button type="button" className="region-info-action" onClick={() => openRiskAnalysis(activeItem.name)}>
+              AI 상세 분석 보기
+            </button>
+            <button type="button" className="region-info-action secondary" onClick={() => openSafeRoute(activeItem.name)}>
+              주변 대피소/안전 경로 보기
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="map-legend region-risk-legend">
-        <strong>위험도 범례</strong>
-        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.SAFE }} />SAFE 안전</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.CAUTION }} />CAUTION 관심</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.WARNING }} />WARNING 주의</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.DANGER }} />DANGER 위험</span>
+        <strong>위험도</strong>
+        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.SAFE }} />안전</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.CAUTION }} />관심</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.WARNING }} />주의</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.DANGER }} />위험</span>
       </div>
       {!layers.regionalRisk ? <div className="region-map-layer-notice">지역별 위험도 레이어가 꺼져 있습니다.</div> : null}
       {isFetching ? <div className="region-map-error">데이터 갱신 중</div> : null}
