@@ -2,7 +2,7 @@ import { DashboardState, MapLayer } from '../../shared/types/domain';
 
 export const mockDashboard: DashboardState = {
   alertLevel: 'WARNING',
-  mapCenter: { lat: 37.5665, lng: 126.978 },
+  selectedRegion: '강남구',
   sensorSummary: {
     total: 164,
     online: 151,
@@ -32,16 +32,6 @@ export const mockDashboard: DashboardState = {
       reportedAt: '10:41',
     },
   ],
-  aiPrediction: {
-    modelVersion: 'OASIS-FloodNet v1.0',
-    confidence: 0.87,
-    points: [
-      { time: '현재', risk: 62, rainfall: 18 },
-      { time: '+1h', risk: 74, rainfall: 27 },
-      { time: '+2h', risk: 81, rainfall: 34 },
-      { time: '+3h', risk: 68, rainfall: 22 },
-    ],
-  },
 };
 
 export const mapLayers: MapLayer[] = [

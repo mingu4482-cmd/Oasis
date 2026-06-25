@@ -1,188 +1,161 @@
-import React, { useState } from 'react';
-// 🌟 1. useKakaoLoader 추가
-import { Map, MapMarker, Circle, useKakaoLoader } from 'react-kakao-maps-sdk';
-import { Navigation, Bell, ShieldAlert, RefreshCw } from 'lucide-react';
+import { Activity, AlertTriangle, CloudRain, MapPin, Waves } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Map, Circle } from 'react-kakao-maps-sdk'; // 🌟 카카오맵 SDK 추가
+import { REGION_COORDINATES } from '../../shared/constants/regionCoordinates';
+import { useDashboardStore } from '../../shared/store/dashboardStore';
 
-const MOCK_SENSORS = [
-    { id: 1, name: '강남역 11번 출구', lat: 37.4979, lng: 127.0276, level: 85, status: 'danger' },
-    { id: 2, name: '역삼역 3번 출구', lat: 37.5006, lng: 127.0364, level: 20, status: 'safe' },
-    { id: 3, name: '양재역 사거리', lat: 37.485, lng: 127.032, level: 15, status: 'safe' },
-];
+const CONTROL_LAYERS = [
+  { id: 'regionalRisk', label: '지역별 위험도', icon: Activity },
+  { id: 'waterLevel', label: '하수관로 수위', icon: Waves },
+  { id: 'rainfall', label: '강우량 관측', icon: CloudRain },
+] as const;
+
+type LayerId = (typeof CONTROL_LAYERS)[number]['id'];
+type LayerVisibility = Record<LayerId, boolean>;
+
+// 🌟 백엔드 데이터용 인터페이스
+interface Manhole {
+    locationId: number;
+    name: string;
+    latitude: number;
+    longitude: number;
+    waterLevel: number;
+}
 
 export const MapViewPage = () => {
-    const [center, setCenter] = useState({ lat: 37.4979, lng: 127.0276 });
-    const [isRefreshing, setIsRefreshing] = useState(false);
+  const selectedRegion = useDashboardStore((state) => state.selectedRegion);
+  const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
+    regionalRisk: true,
+    waterLevel: true,
+    rainfall: true,
+  });
 
-    // 🌟 2. React 안에서 카카오맵을 안전하게 불러오는 마법의 코드!
-    const [loading, error] = useKakaoLoader({
-        appkey: '1cc92d0b3666ef740a88e12a74a1fe06', // <-- ⚠️ 여기에 꼭 진짜 키를 따옴표 안에 넣어주세요!
-        libraries: ['services', 'clusterer'],
-    });
+  // 🌟 동생이 만든 실시간 벡엔드 연동 로직
+  const [manholes, setManholes] = useState<Manhole[]>([]);
+  useEffect(() => {
+      const fetchData = async () => {
+          try {
+              const response = await fetch('http://localhost:8080/api/manholes');
+              if (!response.ok) throw new Error('API 서버 연결 안 됨');
+              const data: Manhole[] = await response.json();
+              const validData = data.filter(m => m.latitude !== 0 && m.latitude !== null);
+              setManholes(validData);
+          } catch (e) {
+              console.error("🚨 백엔드 연결 실패!", e);
+          }
+      };
+      fetchData();
+      const interval = setInterval(fetchData, 60000);
+      return () => clearInterval(interval);
+  }, []);
 
-    const handleRefresh = () => {
-        setIsRefreshing(true);
-        setTimeout(() => {
-            setIsRefreshing(false);
-            alert('실시간 하수관로 수위 데이터가 갱신되었습니다.');
-        }, 1000);
-    };
+  const getHeatmapColor = (waterLevel: number) => {
+      if (waterLevel >= 90) return '#ef4444';
+      if (waterLevel >= 60) return '#f59e0b';
+      return '#10b981';
+  };
 
-    // 🌟 3. 로딩 중이거나 에러가 났을 때 보여줄 화면
-    if (loading)
-        return (
-            <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center' }}>
-                지도 불러오는 중... ⏳
-            </div>
-        );
-    if (error)
-        return (
-            <div
-                style={{
-                    display: 'flex',
-                    height: '100vh',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    color: 'red',
-                }}
-            >
-                지도 로딩 에러! (F12 콘솔창을 확인해주세요)
-            </div>
-        );
+  const toggleLayer = (layerId: LayerId) => {
+    setLayerVisibility((current) => ({
+      ...current,
+      [layerId]: !current[layerId],
+    }));
+  };
 
-    return (
-        <div
-            style={{
-                width: '100vw',
-                height: '100vh',
-                position: 'relative',
-                overflow: 'hidden',
-                backgroundColor: '#f1f5f9',
-            }}
-        >
-            <div
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    zIndex: 10,
-                    padding: '20px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'linear-gradient(to bottom, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 100%)',
-                }}
-            >
-                <div
-                    style={{
-                        backgroundColor: 'white',
-                        padding: '10px 16px',
-                        borderRadius: '24px',
-                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                    }}
-                >
-                    <Navigation size={18} color="#3b82f6" />
-                    <span style={{ fontWeight: 'bold', color: '#1e293b' }}>내 주변 침수 모니터링</span>
-                </div>
-                <button
-                    style={{
-                        backgroundColor: 'white',
-                        border: 'none',
-                        padding: '10px',
-                        borderRadius: '50%',
-                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
-                        cursor: 'pointer',
-                    }}
-                >
-                    <Bell size={20} color="#64748b" />
-                </button>
+  return (
+    // 🌟 중복되던 AppShell 제거 (Router에서 관리함)
+    <>
+      <div className="page-layout map-view-page">
+        <section className="panel page-hero-panel map-view-hero">
+          <div>
+            <span className="eyebrow">지역별 위험도 지도</span>
+            <h1>지도 기반 침수 위험도 모니터링</h1>
+            <p>서울 주요 지역의 실시간 침수 위험도를 지도에서 확인하고, 지역을 선택해 AI 상세 분석으로 이동할 수 있습니다.</p>
+          </div>
+          <div className="map-view-selected-region">
+            <MapPin size={18} />
+            <strong>{selectedRegion}</strong>
+          </div>
+        </section>
+
+        <div className="control-map-layout">
+          <aside className="control-layer-panel" aria-label="지도 레이어 제어">
+            <div className="control-panel-heading">
+              <span className="eyebrow">통합 관제 레이어</span>
+              <h2>지도 표시 항목</h2>
             </div>
 
-            {/* 카카오맵 렌더링 */}
-            <Map center={center} style={{ width: '100%', height: '100%' }} level={4}>
-                {MOCK_SENSORS.map((sensor) => (
-                    <React.Fragment key={sensor.id}>
-                        <MapMarker
-                            position={{ lat: sensor.lat, lng: sensor.lng }}
-                            image={{
-                                src:
-                                    sensor.status === 'danger'
-                                        ? 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png'
-                                        : 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png',
-                                size: { width: 24, height: 35 },
-                            }}
-                            title={sensor.name}
-                        />
-                        {sensor.status === 'danger' && (
-                            <Circle
-                                center={{ lat: sensor.lat, lng: sensor.lng }}
-                                radius={300}
-                                strokeWeight={2}
-                                strokeColor={'#ef4444'}
-                                strokeOpacity={0.8}
-                                fillColor={'#ef4444'}
-                                fillOpacity={0.3}
-                            />
-                        )}
-                    </React.Fragment>
+            <label className="control-region-select">
+              분석 지역
+              <select value={selectedRegion} onChange={(event) => setSelectedRegion(event.target.value)}>
+                {REGION_COORDINATES.map((region) => (
+                  <option key={region.name} value={region.name}>
+                    {region.name}
+                  </option>
                 ))}
-            </Map>
+              </select>
+            </label>
 
-            <div
-                style={{
-                    position: 'absolute',
-                    bottom: 30,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    zIndex: 10,
-                    width: '90%',
-                    maxWidth: '400px',
-                    backgroundColor: 'white',
-                    borderRadius: '20px',
-                    padding: '24px',
-                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
-                }}
-            >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                    <div style={{ backgroundColor: '#fee2e2', padding: '12px', borderRadius: '50%' }}>
-                        <ShieldAlert size={28} color="#ef4444" />
-                    </div>
-                    <div>
-                        <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#0f172a' }}>
-                            반경 1km 내 침수 주의
-                        </h3>
-                        <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
-                            강남역 11번 출구 하수관로 수위 <strong>85cm</strong> (상승 중)
-                        </p>
-                    </div>
-                </div>
-
-                <button
-                    onClick={handleRefresh}
-                    style={{
-                        width: '100%',
-                        padding: '16px',
-                        backgroundColor: '#3b82f6',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '12px',
-                        fontSize: '15px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        gap: '8px',
-                        opacity: isRefreshing ? 0.7 : 1,
-                    }}
-                >
-                    <RefreshCw size={18} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
-                    {isRefreshing ? '데이터 갱신 중...' : '실시간 수위 데이터 갱신'}
-                </button>
+            <div className="control-layer-list">
+              {CONTROL_LAYERS.map((layer) => {
+                const Icon = layer.icon;
+                return (
+                  <button
+                    type="button"
+                    key={layer.label}
+                    className={layerVisibility[layer.id] ? 'control-layer-row active' : 'control-layer-row'}
+                    aria-pressed={layerVisibility[layer.id]}
+                    onClick={() => toggleLayer(layer.id)}
+                  >
+                    <span className="control-layer-icon">
+                      <Icon size={17} />
+                    </span>
+                    <span>{layer.label}</span>
+                    <strong>{layerVisibility[layer.id] ? 'ON' : 'OFF'}</strong>
+                  </button>
+                );
+              })}
             </div>
+
+            <div className="control-panel-note">
+              <AlertTriangle size={16} />
+              <span>서울시 강우량, 서울시 하수관로, 기상청 단기예보 데이터를 기반으로 표시됩니다.</span>
+            </div>
+            <div className="control-panel-note map-coordinate-note">
+              <MapPin size={16} />
+              <span>※ 지도 마커는 자치구별 위험도를 표시하기 위한 대표 위치 기준이며, 실제 침수 발생 지점을 의미하지 않습니다.</span>
+            </div>
+          </aside>
+
+          {/* 🌟 동생의 실시간 카카오 히트맵을 팀원 UI 공간에 렌더링! */}
+          <div className="full-region-risk-map control-map-surface" style={{ width: '100%', height: 'calc(100vh - 238px)', borderRadius: '12px', overflow: 'hidden' }}>
+              <Map center={{ lat: 37.5665, lng: 126.9780 }} style={{ width: "100%", height: "100%" }} level={8}>
+                  {/* 좌측 패널의 '하수관로 수위' 버튼이 켜져있을 때만 히트맵 표시 연동! */}
+                  {layerVisibility.waterLevel && manholes
+                      .filter((m) => m.waterLevel >= 30)
+                      .map((m) => {
+                          const zoneColor = getHeatmapColor(m.waterLevel);
+                          return (
+                              <Circle
+                                  key={`zone-${m.locationId}`}
+                                  center={{ lat: m.latitude, lng: m.longitude }}
+                                  radius={400}
+                                  strokeWeight={1}
+                                  strokeColor={zoneColor}
+                                  strokeOpacity={0.2}
+                                  fillColor={zoneColor}
+                                  fillOpacity={0.15}
+                              />
+                          );
+                      })}
+              </Map>
+          </div>
+
         </div>
-    );
+      </div>
+    </>
+  );
 };
+
+export default MapViewPage;

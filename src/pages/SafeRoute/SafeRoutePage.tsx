@@ -1,15 +1,27 @@
 import { LocateFixed, Navigation } from 'lucide-react';
 import { AppShell } from '../../shared/components/AppShell';
+import { ShelterMapPanel } from '../../features/safe-route/ShelterMapPanel';
+import { ShelterList } from '../../features/safe-route/ShelterList';
+import { useSafeRouteStore } from '../../features/safe-route/safeRouteStore';
+
+function formatDuration(sec: number) {
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}분`;
+  return `${Math.floor(min / 60)}시간 ${min % 60}분`;
+}
 
 export function SafeRoutePage() {
+  const activeRoute = useSafeRouteStore((s) => s.activeRoute);
+  const shelters = useSafeRouteStore((s) => s.shelters);
+  const selectedId = useSafeRouteStore((s) => s.selectedShelterId);
+
+  const selectedShelter = shelters.find((s) => s.id === selectedId);
+
   return (
     <AppShell>
       <div className="page-layout two-column">
-        <section className="route-map">
-          <div className="route-line" />
-          <span className="route-pin start">현재</span>
-          <span className="route-pin end">대피소</span>
-        </section>
+        <ShelterMapPanel />
+
         <section className="panel">
           <div className="panel-heading">
             <div>
@@ -18,18 +30,29 @@ export function SafeRoutePage() {
             </div>
             <Navigation size={20} aria-hidden="true" />
           </div>
+
           <div className="route-summary">
             <div>
               <LocateFixed size={18} aria-hidden="true" />
               <span>현재 위치 기준</span>
-              <strong>양재천 대피소까지 1.8km</strong>
+              <strong>
+                {selectedShelter
+                  ? `${selectedShelter.name}까지 ${selectedShelter.distanceKm}km`
+                  : '대피소를 선택하세요'}
+              </strong>
             </div>
             <div>
               <Navigation size={18} aria-hidden="true" />
               <span>침수 위험 회피</span>
-              <strong>예상 이동 17분</strong>
+              <strong>
+                {activeRoute
+                  ? `예상 이동 ${formatDuration(activeRoute.durationSec)}`
+                  : '경로 안내 대기 중'}
+              </strong>
             </div>
           </div>
+
+          <ShelterList />
         </section>
       </div>
     </AppShell>
