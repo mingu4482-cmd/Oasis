@@ -1,10 +1,34 @@
-import { MapPin } from 'lucide-react';
+import { Activity, AlertTriangle, CloudRain, MapPin, Waves } from 'lucide-react';
+import { useState } from 'react';
 import { RegionRiskMapPanel } from '../../features/kakao-map/RegionRiskMapPanel';
 import { AppShell } from '../../shared/components/AppShell';
+import { REGION_COORDINATES } from '../../shared/constants/regionCoordinates';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
+
+const CONTROL_LAYERS = [
+  { id: 'regionalRisk', label: '지역별 위험도', icon: Activity },
+  { id: 'waterLevel', label: '하수관로 수위', icon: Waves },
+  { id: 'rainfall', label: '강우량 관측', icon: CloudRain },
+] as const;
+
+type LayerId = (typeof CONTROL_LAYERS)[number]['id'];
+type LayerVisibility = Record<LayerId, boolean>;
 
 export const MapViewPage = () => {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
+  const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
+    regionalRisk: true,
+    waterLevel: true,
+    rainfall: true,
+  });
+
+  const toggleLayer = (layerId: LayerId) => {
+    setLayerVisibility((current) => ({
+      ...current,
+      [layerId]: !current[layerId],
+    }));
+  };
 
   return (
     <AppShell>
@@ -12,8 +36,8 @@ export const MapViewPage = () => {
         <section className="panel page-hero-panel map-view-hero">
           <div>
             <span className="eyebrow">지역별 위험도 지도</span>
-            <h1>통합 침수 위험도 지도</h1>
-            <p>지역 마커를 선택하면 AI 위험도 분석 기준 지역이 함께 변경됩니다.</p>
+            <h1>지도 기반 침수 위험도 모니터링</h1>
+            <p>서울 주요 지역의 실시간 침수 위험도를 지도에서 확인하고, 지역을 선택해 AI 상세 분석으로 이동할 수 있습니다.</p>
           </div>
           <div className="map-view-selected-region">
             <MapPin size={18} />
@@ -21,7 +45,58 @@ export const MapViewPage = () => {
           </div>
         </section>
 
-        <RegionRiskMapPanel className="full-region-risk-map" height="calc(100vh - 210px)" />
+        <div className="control-map-layout">
+          <aside className="control-layer-panel" aria-label="지도 레이어 제어">
+            <div className="control-panel-heading">
+              <span className="eyebrow">통합 관제 레이어</span>
+              <h2>지도 표시 항목</h2>
+            </div>
+
+            <label className="control-region-select">
+              분석 지역
+              <select value={selectedRegion} onChange={(event) => setSelectedRegion(event.target.value)}>
+                {REGION_COORDINATES.map((region) => (
+                  <option key={region.name} value={region.name}>
+                    {region.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="control-layer-list">
+              {CONTROL_LAYERS.map((layer) => {
+                const Icon = layer.icon;
+                return (
+                  <button
+                    type="button"
+                    key={layer.label}
+                    className={layerVisibility[layer.id] ? 'control-layer-row active' : 'control-layer-row'}
+                    aria-pressed={layerVisibility[layer.id]}
+                    onClick={() => toggleLayer(layer.id)}
+                  >
+                    <span className="control-layer-icon">
+                      <Icon size={17} />
+                    </span>
+                    <span>{layer.label}</span>
+                    <strong>{layerVisibility[layer.id] ? 'ON' : 'OFF'}</strong>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="control-panel-note">
+              <AlertTriangle size={16} />
+              <span>서울시 강우량, 서울시 하수관로, 기상청 단기예보 데이터를 기반으로 표시됩니다.</span>
+            </div>
+
+            <div className="control-panel-note map-coordinate-note">
+              <MapPin size={16} />
+              <span>※ 지도 마커는 자치구별 위험도를 표시하기 위한 대표 위치 기준이며, 실제 침수 발생 지점을 의미하지 않습니다.</span>
+            </div>
+          </aside>
+
+          <RegionRiskMapPanel className="full-region-risk-map control-map-surface" height="calc(100vh - 238px)" layerVisibility={layerVisibility} />
+        </div>
       </div>
     </AppShell>
   );
