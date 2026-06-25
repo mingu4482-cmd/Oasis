@@ -28,6 +28,13 @@ const RISK_RADIUS: Record<RiskLabel, number> = {
   DANGER: 420,
 };
 
+const RISK_LABEL_KO: Record<RiskLabel, string> = {
+  SAFE: '안전',
+  CAUTION: '관심',
+  WARNING: '주의',
+  DANGER: '위험',
+};
+
 const DATA_STATUS_LABEL: Record<string, string> = {
   REALTIME: '실시간',
   PARTIAL: '일부 수집',
@@ -49,10 +56,29 @@ const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
 
 const formatNumber = (value: number | undefined, unit: string) => (typeof value === 'number' ? `${value}${unit}` : '-');
 
+const formatForecastRainfall = (status?: LiveStatusResponse) => {
+  const values = [status?.forecastRainfall1h, status?.forecastRainfall2h, status?.forecastRainfall3h].filter(
+    (value): value is number => typeof value === 'number',
+  );
+  if (!values.length) return '-';
+  return `${Math.max(...values)}mm`;
+};
+
 interface RegionRiskMapPanelProps {
   className?: string;
   height?: string;
+  layerVisibility?: {
+    regionalRisk: boolean;
+    waterLevel: boolean;
+    rainfall: boolean;
+  };
 }
+
+const defaultLayerVisibility = {
+  regionalRisk: true,
+  waterLevel: true,
+  rainfall: true,
+};
 
 function useRegionalStatus() {
   return useQuery({
@@ -63,12 +89,13 @@ function useRegionalStatus() {
   });
 }
 
-function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRiskMapPanelProps & { isKakaoReady: boolean }) {
+function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisibility }: RegionRiskMapPanelProps & { isKakaoReady: boolean }) {
   const navigate = useNavigate();
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
   const [activeInfoRegion, setActiveInfoRegion] = useState(selectedRegion);
   const { data: regionalStatus, isFetching, isError } = useRegionalStatus();
+  const layers = { ...defaultLayerVisibility, ...layerVisibility };
 
   useEffect(() => {
     setActiveInfoRegion(selectedRegion);
@@ -103,6 +130,11 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRi
     navigate(`/risk-analysis?region=${encodeURIComponent(regionName)}`);
   };
 
+  const openSafeRoute = (regionName: string) => {
+    selectRegion(regionName);
+    navigate(`/safe-route?region=${encodeURIComponent(regionName)}`);
+  };
+
   if (!isKakaoReady) {
     return (
       <section className={`map-surface region-risk-map ${className}`} style={height ? { height } : undefined}>
@@ -131,18 +163,18 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRi
   return (
     <section className={`map-surface region-risk-map ${className}`} style={height ? { height } : undefined} aria-label="지역별 침수 위험도 지도">
       <Map center={{ lat: center.lat, lng: center.lng }} isPanto level={8} style={{ width: '100%', height: '100%' }}>
-        {regionItems.map((item) => (
+        {layers.regionalRisk ? regionItems.map((item) => (
           <Fragment key={item.name}>
             <Circle
               center={{ lat: item.lat, lng: item.lng }}
-              radius={item.radius}
-              strokeWeight={1}
+              radius={item.name === selectedRegion ? Math.round(item.radius * 1.12) : item.radius}
+              strokeWeight={item.name === selectedRegion ? 3 : 1}
               strokeColor={item.markerColor}
-              strokeOpacity={0.55}
+              strokeOpacity={item.name === selectedRegion ? 0.85 : 0.55}
               fillColor={item.markerColor}
-              fillOpacity={item.name === selectedRegion ? 0.22 : 0.12}
+              fillOpacity={item.name === selectedRegion ? 0.24 : 0.12}
             />
-            <CustomOverlayMap position={{ lat: item.lat, lng: item.lng }} clickable yAnchor={0.9} zIndex={item.name === selectedRegion ? 4 : 2}>
+            <CustomOverlayMap position={{ lat: item.lat, lng: item.lng }} clickable yAnchor={0.9} zIndex={item.name === selectedRegion ? 8 : 2}>
               <button
                 type="button"
                 className={item.name === selectedRegion ? 'region-risk-marker active' : 'region-risk-marker'}
@@ -154,67 +186,110 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady }: RegionRi
               </button>
             </CustomOverlayMap>
           </Fragment>
-        ))}
+        )) : null}
 
-        {activeItem ? (
+        {activeItem && layers.regionalRisk ? (
           <CustomOverlayMap position={{ lat: activeItem.lat, lng: activeItem.lng }} clickable yAnchor={1.15} zIndex={10}>
             <div className="region-info-window">
               <div className="region-info-heading">
                 <strong>{activeItem.name}</strong>
-                <span style={{ background: activeItem.markerColor }}>{activeItem.riskLabel}</span>
+                <span style={{ background: activeItem.markerColor }}>{RISK_LABEL_KO[activeItem.riskLabel]}</span>
               </div>
+              <p className="region-info-position-note">표시 위치: 자치구 대표 좌표</p>
               <div className="region-info-grid">
-                <span>위험 점수</span>
+                <span>위험도 점수</span>
                 <strong>{activeItem.status?.riskScore ?? 0}%</strong>
-                <span>강우량</span>
-                <strong>{formatNumber(activeItem.status?.rainfall, 'mm')}</strong>
-                <span>하수관로 수위</span>
-                <strong>{formatNumber(activeItem.status?.waterLevel, '%')}</strong>
+                <span>위험도 등급</span>
+                <strong>{activeItem.riskLabel}</strong>
+                {layers.rainfall ? (
+                  <>
+                    <span>강우량</span>
+                    <strong>{formatNumber(activeItem.status?.rainfall, 'mm')}</strong>
+                  </>
+                ) : null}
+                {layers.waterLevel ? (
+                  <>
+                    <span>하수관로 수위</span>
+                    <strong>{formatNumber(activeItem.status?.waterLevel, '%')}</strong>
+                  </>
+                ) : null}
+                <span>예보 강수량</span>
+                <strong>{formatForecastRainfall(activeItem.status)}</strong>
+                <span>데이터 출처</span>
+                <strong>{activeItem.status?.source ?? DATA_STATUS_LABEL[activeItem.status?.dataStatus ?? 'UNAVAILABLE'] ?? '-'}</strong>
               </div>
-              {activeItem.status?.dataStatus === 'PARTIAL' ? (
-                <p className="model-label">일부 데이터가 수집되지 않아 분석 신뢰도가 낮습니다.</p>
-              ) : null}
-              {activeItem.status?.dataStatus === 'FALLBACK' || activeItem.status?.dataStatus === 'UNAVAILABLE' ? (
-                <p className="model-label">해당 지역은 현재 실시간 데이터가 부족하여 AI 위험도 분석을 제공할 수 없습니다.</p>
-              ) : null}
-              {activeItem.status?.dataStatus === 'REALTIME' ? <p className="model-label">실시간 API 기반 분석</p> : null}
-              <button type="button" className="region-info-action" onClick={() => openRiskAnalysis(activeItem.name)}>
-                상세 분석 보기
-              </button>
+              <div className="region-info-actions">
+                <button type="button" className="region-info-action" onClick={() => openRiskAnalysis(activeItem.name)}>
+                  AI 상세 분석 보기
+                </button>
+                <button type="button" className="region-info-action secondary" onClick={() => openSafeRoute(activeItem.name)}>
+                  주변 대피소/안전 경로 보기
+                </button>
+              </div>
             </div>
           </CustomOverlayMap>
         ) : null}
       </Map>
 
       <div className="map-legend region-risk-legend">
-        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.SAFE }} />SAFE</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.CAUTION }} />CAUTION</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.WARNING }} />WARNING</span>
-        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.DANGER }} />DANGER</span>
+        <strong>위험도 범례</strong>
+        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.SAFE }} />SAFE 안전</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.CAUTION }} />CAUTION 관심</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.WARNING }} />WARNING 주의</span>
+        <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.DANGER }} />DANGER 위험</span>
       </div>
+      {!layers.regionalRisk ? <div className="region-map-layer-notice">지역별 위험도 레이어가 꺼져 있습니다.</div> : null}
       {isFetching ? <div className="region-map-error">데이터 갱신 중</div> : null}
       {isError ? <div className="region-map-error">지역별 위험도 데이터를 불러오지 못했습니다.</div> : null}
     </section>
   );
 }
 
-function RegionRiskMapWithLoader(props: RegionRiskMapPanelProps) {
-  const kakaoMapKey = import.meta.env.VITE_KAKAO_MAP_KEY ?? '';
-  const [kakaoLoading, kakaoError] = useKakaoLoader({
-    appkey: kakaoMapKey,
-    libraries: ['services', 'clusterer'],
+function RegionRiskMapFallback(props: RegionRiskMapPanelProps) {
+  const selectedRegion = useDashboardStore((state) => state.selectedRegion);
+  const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
+  const { data: regionalStatus } = useRegionalStatus();
+
+  const regionItems = REGION_COORDINATES.map((coordinate) => {
+    const status = regionalStatus?.regionStatusMap?.[coordinate.name];
+    const riskLabel = toRiskLabel(status);
+    return {
+      ...coordinate,
+      status,
+      riskLabel,
+      markerColor: status?.dataStatus === 'FALLBACK' || status?.dataStatus === 'UNAVAILABLE' ? DATA_UNAVAILABLE_COLOR : RISK_MARKER_COLOR[riskLabel],
+    };
   });
 
-  if (!kakaoMapKey) {
-    return (
-      <section className={`map-surface region-risk-map ${props.className ?? ''}`} style={props.height ? { height: props.height } : undefined}>
-        <div className="region-map-fallback">
-          <strong>카카오 지도 키가 설정되지 않았습니다.</strong>
-          <span>.env.local의 VITE_KAKAO_MAP_KEY를 확인하세요.</span>
+  return (
+    <section className={`map-surface region-risk-map ${props.className ?? ''}`} style={props.height ? { height: props.height } : undefined}>
+      <div className="region-map-fallback">
+        <strong>카카오 지도 키가 설정되지 않아 지도 화면을 표시할 수 없습니다.</strong>
+        <span>지역 목록에서 분석 기준 지역을 선택할 수 있습니다.</span>
+        <div className="region-fallback-list">
+          {regionItems.map((item) => (
+            <button
+              type="button"
+              key={item.name}
+              className={item.name === selectedRegion ? 'region-fallback-button active' : 'region-fallback-button'}
+              onClick={() => setSelectedRegion(item.name)}
+            >
+              <span className="region-risk-dot" style={{ background: item.markerColor }} />
+              {item.name}
+              <strong>{item.riskLabel}</strong>
+            </button>
+          ))}
         </div>
-      </section>
-    );
-  }
+      </div>
+    </section>
+  );
+}
+
+function RegionRiskMapLoaderContent(props: RegionRiskMapPanelProps & { kakaoMapKey: string }) {
+  const [kakaoLoading, kakaoError] = useKakaoLoader({
+    appkey: props.kakaoMapKey,
+    libraries: ['services', 'clusterer'],
+  });
 
   if (kakaoError) {
     return (
@@ -228,6 +303,16 @@ function RegionRiskMapWithLoader(props: RegionRiskMapPanelProps) {
   }
 
   return <RegionRiskMapContent {...props} isKakaoReady={!kakaoLoading} />;
+}
+
+function RegionRiskMapWithLoader(props: RegionRiskMapPanelProps) {
+  const kakaoMapKey = import.meta.env.VITE_KAKAO_MAP_KEY ?? '';
+
+  if (!kakaoMapKey) {
+    return <RegionRiskMapFallback {...props} />;
+  }
+
+  return <RegionRiskMapLoaderContent {...props} kakaoMapKey={kakaoMapKey} />;
 }
 
 export function RegionRiskMapPanel(props: RegionRiskMapPanelProps) {
