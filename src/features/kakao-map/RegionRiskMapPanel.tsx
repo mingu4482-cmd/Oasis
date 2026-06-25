@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CustomOverlayMap, Map as KakaoMap, Polygon, useKakaoLoader } from 'react-kakao-maps-sdk';
 import { useNavigate } from 'react-router-dom';
-import { fetchRegionalStatus, LiveStatusResponse, RegionalStatusResponse, RiskForecastPoint, RiskLabel } from '../../shared/api/aiApi';
+import { fetchRegionalStatus, LiveStatusResponse, RiskForecastPoint, RiskLabel } from '../../shared/api/aiApi';
 import { REGION_COORDINATES, findRegionCoordinate } from '../../shared/constants/regionCoordinates';
 import { SEOUL_DISTRICT_BOUNDARIES } from '../../shared/constants/seoulDistrictBoundaries';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
@@ -118,51 +118,10 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
   const navigate = useNavigate();
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
-<<<<<<< HEAD
-  const [regionalStatus, setRegionalStatus] = useState<RegionalStatusResponse | null>(null);
-  const [activeInfoRegion, setActiveInfoRegion] = useState(selectedRegion);
-  const [dataError, setDataError] = useState('');
-  const [timeIndex, setTimeIndex] = useState(0);
-  const [kakaoLoading, kakaoError] = useKakaoLoader({
-    appkey: kakaoMapKey,
-    libraries: ['services', 'clusterer'],
-  });
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadRegionalStatus = async () => {
-      try {
-        const data = await fetchRegionalStatus();
-        if (isMounted) {
-          setRegionalStatus(data);
-          setDataError('');
-        }
-      } catch (error) {
-        console.error('Failed to fetch regional map status:', error);
-        if (isMounted) {
-          setDataError('지역별 위험도 데이터를 불러오지 못했습니다.');
-        }
-      }
-    };
-
-    loadRegionalStatus();
-    const interval = window.setInterval(loadRegionalStatus, 30000);
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  useEffect(() => {
-    setActiveInfoRegion(selectedRegion);
-  }, [selectedRegion]);
-=======
   const [activeInfoRegion, setActiveInfoRegion] = useState<string | null>(null);
+  const [timeIndex, setTimeIndex] = useState(0);
   const { data: regionalStatus, isFetching, isError } = useRegionalStatus();
   const layers = { ...defaultLayerVisibility, ...layerVisibility };
->>>>>>> origin/dev
 
   const regionItems = useMemo(
     () =>
@@ -173,15 +132,11 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
           ...coordinate,
           boundaryPaths: DISTRICT_BOUNDARY_MAP.get(coordinate.name) ?? [],
           status,
-<<<<<<< HEAD
           timeData,
           riskLabel: timeData.riskLabel,
-          markerColor: RISK_MARKER_COLOR[timeData.riskLabel],
-          radius: RISK_RADIUS[timeData.riskLabel],
-=======
-          riskLabel,
-          markerColor: status?.dataStatus === 'FALLBACK' || status?.dataStatus === 'UNAVAILABLE' ? DATA_UNAVAILABLE_COLOR : RISK_MARKER_COLOR[riskLabel],
->>>>>>> origin/dev
+          markerColor: status?.dataStatus === 'FALLBACK' || status?.dataStatus === 'UNAVAILABLE'
+            ? DATA_UNAVAILABLE_COLOR
+            : RISK_MARKER_COLOR[timeData.riskLabel],
         };
       }),
     [regionalStatus, timeIndex],
@@ -264,46 +219,6 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
             </CustomOverlayMap>
           </Fragment>
         )) : null}
-
-<<<<<<< HEAD
-        {activeItem ? (
-          <CustomOverlayMap position={{ lat: activeItem.lat, lng: activeItem.lng }} clickable yAnchor={1.15} zIndex={10}>
-            <div className="region-info-window">
-              <div className="region-info-heading">
-                <strong>{activeItem.name}</strong>
-                <span style={{ background: activeItem.markerColor }}>{activeItem.riskLabel}</span>
-                {timeIndex > 0 && (
-                  <span className="region-info-time-badge">{TIME_LABELS[timeIndex]} 예측</span>
-                )}
-              </div>
-              <div className="region-info-grid">
-                <span>위험도 점수</span>
-                <strong>{activeItem.timeData.riskScore}%</strong>
-                <span>강우량</span>
-                <strong>{formatNumber(activeItem.timeData.rainfall, 'mm')}</strong>
-                <span>하수관로 수위</span>
-                <strong>{formatNumber(activeItem.timeData.waterLevel, '%')}</strong>
-                {timeIndex === 0 && (
-                  <>
-                    <span>데이터 출처</span>
-                    <strong>{activeItem.status?.source ?? (regionalStatus?.hasData ? 'regional api' : 'fallback')}</strong>
-                  </>
-                )}
-                {!activeItem.timeData.hasForecast && (
-                  <>
-                    <span>예측 데이터</span>
-                    <strong style={{ color: '#b45309' }}>미수신</strong>
-                  </>
-                )}
-              </div>
-              <button type="button" className="region-info-action" onClick={() => openRiskAnalysis(activeItem.name)}>
-                상세 분석 보기
-              </button>
-            </div>
-          </CustomOverlayMap>
-        ) : null}
-      </Map>
-=======
       </KakaoMap>
 
       {activeItem && layers.regionalRisk ? (
@@ -315,24 +230,15 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
           <div className="region-info-heading">
             <strong>{activeItem.name}</strong>
             <span style={{ background: activeItem.markerColor }}>{RISK_LABEL_KO[activeItem.riskLabel]}</span>
+            {timeIndex > 0 && <span className="region-info-time-badge">{TIME_LABELS[timeIndex]} 예측</span>}
           </div>
           <div className="region-info-grid">
             <span>위험도 점수</span>
-            <strong>{activeItem.status?.riskScore ?? 0}%</strong>
-            <span>위험도 등급</span>
-            <strong>{activeItem.riskLabel}</strong>
-            {layers.rainfall ? (
-              <>
-                <span>강우량</span>
-                <strong>{formatNumber(activeItem.status?.rainfall, 'mm')}</strong>
-              </>
-            ) : null}
-            {layers.waterLevel ? (
-              <>
-                <span>하수관로 수위</span>
-                <strong>{formatNumber(activeItem.status?.waterLevel, '%')}</strong>
-              </>
-            ) : null}
+            <strong>{activeItem.timeData.riskScore}%</strong>
+            <span>강우량</span>
+            <strong>{formatNumber(activeItem.timeData.rainfall, 'mm')}</strong>
+            <span>하수관로 수위</span>
+            <strong>{formatNumber(activeItem.timeData.waterLevel, '%')}</strong>
             <span>예보 강수량</span>
             <strong>{formatForecastRainfall(activeItem.status)}</strong>
             <span>데이터 출처</span>
@@ -348,7 +254,6 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
           </div>
         </div>
       ) : null}
->>>>>>> origin/dev
 
       {/* 시간대 슬라이더 */}
       <div className="time-slider-panel">
