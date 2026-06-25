@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Circle, CustomOverlayMap, Map, useKakaoLoader } from 'react-kakao-maps-sdk';
 import { useNavigate } from 'react-router-dom';
-import { fetchRegionalStatus, LiveStatusResponse, RegionalStatusResponse, RiskLabel } from '../../shared/api/aiApi';
+import { fetchRegionalStatus, LiveStatusResponse, RegionalStatusResponse, RiskForecastPoint, RiskLabel } from '../../shared/api/aiApi';
 import { REGION_COORDINATES, findRegionCoordinate } from '../../shared/constants/regionCoordinates';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
 
@@ -20,6 +20,8 @@ const RISK_RADIUS: Record<RiskLabel, number> = {
   DANGER: 420,
 };
 
+const TIME_LABELS = ['현재', '+1시간', '+2시간', '+3시간'] as const;
+
 const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
   if (status?.riskLabel === 'SAFE' || status?.riskLabel === 'CAUTION' || status?.riskLabel === 'WARNING' || status?.riskLabel === 'DANGER') {
     return status.riskLabel;
@@ -31,6 +33,34 @@ const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
   if (score >= 40) return 'CAUTION';
   return 'SAFE';
 };
+
+interface TimeData {
+  riskScore: number;
+  riskLabel: RiskLabel;
+  rainfall: number | undefined;
+  waterLevel: number | undefined;
+  hasForecast: boolean;
+}
+
+function getDataAtTime(status: LiveStatusResponse | undefined, index: number): TimeData {
+  const base: TimeData = {
+    riskScore: status?.riskScore ?? 0,
+    riskLabel: toRiskLabel(status),
+    rainfall: status?.rainfall,
+    waterLevel: status?.waterLevel,
+    hasForecast: index === 0,
+  };
+  if (!status || index === 0) return { ...base, hasForecast: true };
+  const point: RiskForecastPoint | undefined = status.points?.[index - 1];
+  if (!point) return base;
+  return {
+    riskScore: Math.round(point.risk),
+    riskLabel: point.riskLabel,
+    rainfall: point.rainfall,
+    waterLevel: status.waterLevel,
+    hasForecast: true,
+  };
+}
 
 const formatNumber = (value: number | undefined, unit: string) => (typeof value === 'number' ? `${value}${unit}` : '-');
 
@@ -47,6 +77,7 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
   const [regionalStatus, setRegionalStatus] = useState<RegionalStatusResponse | null>(null);
   const [activeInfoRegion, setActiveInfoRegion] = useState(selectedRegion);
   const [dataError, setDataError] = useState('');
+  const [timeIndex, setTimeIndex] = useState(0);
   const [kakaoLoading, kakaoError] = useKakaoLoader({
     appkey: kakaoMapKey,
     libraries: ['services', 'clusterer'],
@@ -87,16 +118,17 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
     () =>
       REGION_COORDINATES.map((coordinate) => {
         const status = regionalStatus?.regionStatusMap?.[coordinate.name];
-        const riskLabel = toRiskLabel(status);
+        const timeData = getDataAtTime(status, timeIndex);
         return {
           ...coordinate,
           status,
-          riskLabel,
-          markerColor: RISK_MARKER_COLOR[riskLabel],
-          radius: RISK_RADIUS[riskLabel],
+          timeData,
+          riskLabel: timeData.riskLabel,
+          markerColor: RISK_MARKER_COLOR[timeData.riskLabel],
+          radius: RISK_RADIUS[timeData.riskLabel],
         };
       }),
-    [regionalStatus],
+    [regionalStatus, timeIndex],
   );
 
   const center = findRegionCoordinate(selectedRegion);
@@ -181,7 +213,7 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
                 onClick={() => selectRegion(item.name)}
               >
                 <span>{item.name}</span>
-                <strong>{item.status?.riskScore ?? 0}%</strong>
+                <strong>{item.timeData.riskScore}%</strong>
               </button>
             </CustomOverlayMap>
           </Fragment>
@@ -193,16 +225,29 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
               <div className="region-info-heading">
                 <strong>{activeItem.name}</strong>
                 <span style={{ background: activeItem.markerColor }}>{activeItem.riskLabel}</span>
+                {timeIndex > 0 && (
+                  <span className="region-info-time-badge">{TIME_LABELS[timeIndex]} 예측</span>
+                )}
               </div>
               <div className="region-info-grid">
                 <span>위험도 점수</span>
-                <strong>{activeItem.status?.riskScore ?? 0}%</strong>
+                <strong>{activeItem.timeData.riskScore}%</strong>
                 <span>강우량</span>
-                <strong>{formatNumber(activeItem.status?.rainfall, 'mm')}</strong>
+                <strong>{formatNumber(activeItem.timeData.rainfall, 'mm')}</strong>
                 <span>하수관로 수위</span>
-                <strong>{formatNumber(activeItem.status?.waterLevel, '%')}</strong>
-                <span>데이터 출처</span>
-                <strong>{activeItem.status?.source ?? (regionalStatus?.hasData ? 'regional api' : 'fallback')}</strong>
+                <strong>{formatNumber(activeItem.timeData.waterLevel, '%')}</strong>
+                {timeIndex === 0 && (
+                  <>
+                    <span>데이터 출처</span>
+                    <strong>{activeItem.status?.source ?? (regionalStatus?.hasData ? 'regional api' : 'fallback')}</strong>
+                  </>
+                )}
+                {!activeItem.timeData.hasForecast && (
+                  <>
+                    <span>예측 데이터</span>
+                    <strong style={{ color: '#b45309' }}>미수신</strong>
+                  </>
+                )}
               </div>
               <button type="button" className="region-info-action" onClick={() => openRiskAnalysis(activeItem.name)}>
                 상세 분석 보기
@@ -211,6 +256,26 @@ export function RegionRiskMapPanel({ className = '', height }: RegionRiskMapPane
           </CustomOverlayMap>
         ) : null}
       </Map>
+
+      {/* 시간대 슬라이더 */}
+      <div className="time-slider-panel">
+        <span className="time-slider-heading">
+          예측 시간대
+          {timeIndex > 0 && <em className="time-slider-forecast-badge">AI 예측</em>}
+        </span>
+        <div className="time-step-buttons">
+          {TIME_LABELS.map((label, i) => (
+            <button
+              key={label}
+              type="button"
+              className={`time-step-button${timeIndex === i ? ' active' : ''}`}
+              onClick={() => setTimeIndex(i)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="map-legend region-risk-legend">
         <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.SAFE }} />SAFE</span>
