@@ -1,67 +1,6 @@
 import { SafeRoute, Shelter } from '../../shared/types/domain';
 
-export const mockShelters: Shelter[] = [
-  {
-    id: 'SHL-001',
-    name: '양재천 대피소',
-    address: '서울시 서초구 양재동 232',
-    type: '체육관',
-    status: '운영 중',
-    capacity: 500,
-    currentOccupancy: 128,
-    lat: 37.4754,
-    lng: 127.0494,
-    distanceKm: 1.8,
-  },
-  {
-    id: 'SHL-002',
-    name: '대치동 주민센터',
-    address: '서울시 강남구 대치동 914',
-    type: '주민센터',
-    status: '운영 중',
-    capacity: 200,
-    currentOccupancy: 54,
-    lat: 37.4944,
-    lng: 127.0617,
-    distanceKm: 2.4,
-  },
-  {
-    id: 'SHL-003',
-    name: '반포 복지관',
-    address: '서울시 서초구 반포동 728',
-    type: '복지관',
-    status: '대기',
-    capacity: 300,
-    currentOccupancy: 0,
-    lat: 37.5042,
-    lng: 127.0054,
-    distanceKm: 3.1,
-  },
-  {
-    id: 'SHL-004',
-    name: '합정 초등학교',
-    address: '서울시 마포구 합정동 411',
-    type: '학교',
-    status: '운영 중',
-    capacity: 400,
-    currentOccupancy: 310,
-    lat: 37.5497,
-    lng: 126.9136,
-    distanceKm: 4.7,
-  },
-  {
-    id: 'SHL-005',
-    name: '서초구청 별관',
-    address: '서울시 서초구 서초동 1355',
-    type: '주민센터',
-    status: '만원',
-    capacity: 150,
-    currentOccupancy: 150,
-    lat: 37.4836,
-    lng: 127.0324,
-    distanceKm: 5.2,
-  },
-];
+export const mockShelters: Shelter[] = [];
 
 export const mockRoute: SafeRoute = {
   shelterId: 'SHL-001',

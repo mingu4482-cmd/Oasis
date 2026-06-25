@@ -2332,3 +2332,193 @@ input.input-invalid { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220,38,3
     font-size: 30px;
   }
 }
+
+/* ── 지도 상단 컨트롤 (반경 필터 + 출발지 초기화) ─────────────────────────── */
+.map-top-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 56px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+.map-top-controls > * { pointer-events: auto; }
+
+.radius-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-sm);
+}
+
+.radius-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.radius-button {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  background: var(--panel);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+.radius-button:hover { border-color: var(--brand-600); color: var(--brand-600); }
+.radius-button.active {
+  background: var(--brand-600);
+  border-color: var(--brand-600);
+  color: #fff;
+}
+
+.radius-count {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--brand-600);
+  background: var(--brand-50);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.custom-origin-reset {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid #7c3aed;
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(10px);
+  color: #7c3aed;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.custom-origin-reset:hover { background: #7c3aed; color: #fff; }
+
+.shelter-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.shelter-empty-state p    { margin: 0; font-size: 14px; font-weight: 700; color: var(--text-secondary); }
+.shelter-empty-state span { font-size: 12px; }
+
+.map-click-hint {
+  position: absolute;
+  bottom: 108px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 5px 14px;
+  border-radius: 20px;
+  background: rgba(0,0,0,0.52);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: fadeInUp 400ms ease both;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── 시간대 예측 슬라이더 ─────────────────────────────────────────────────── */
+.time-slider-panel {
+  position: absolute;
+  bottom: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-md);
+  white-space: nowrap;
+}
+
+.time-slider-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.time-slider-forecast-badge {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--brand-600);
+  background: var(--brand-50);
+  padding: 1px 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(15,118,110,0.2);
+}
+
+.time-step-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.time-step-button {
+  padding: 4px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  background: var(--panel);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition), box-shadow var(--transition);
+}
+.time-step-button:hover {
+  border-color: var(--brand-600);
+  color: var(--brand-600);
+}
+.time-step-button.active {
+  background: var(--brand-600);
+  border-color: var(--brand-600);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(15,118,110,0.3);
+}
+
+/* 정보창 시간 뱃지 */
+.region-info-time-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--brand-600);
+  background: var(--brand-50);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(15,118,110,0.2);
+}
