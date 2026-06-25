@@ -1,10 +1,9 @@
-import { Activity, AlertTriangle, Clock, Database, Droplets, MapPin } from 'lucide-react';
+import { AlertTriangle, Clock, Database, Droplets, MapPin } from 'lucide-react';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { IncidentTimeline } from '../../features/alert-system/IncidentTimeline';
 import { KakaoMapPanel } from '../../features/kakao-map/KakaoMapPanel';
-import { SensorStatusPanel } from '../../features/sensor-monitor/SensorStatusPanel';
 import { fetchRegionalStatus, LiveStatusResponse, RegionalStatusResponse } from '../../shared/api/aiApi';
 import { AppShell } from '../../shared/components/AppShell';
 import { MetricTile } from '../../shared/components/MetricTile';
@@ -55,7 +54,6 @@ export function DashboardPage() {
   const highestRiskRegion = rankedRegions[0] ?? null;
   const top3Regions = rankedRegions.slice(0, 3);
   const hasRegionalData = rankedRegions.length > 0;
-  const highestRiskLabel = highestRiskRegion?.riskLabel ?? 'SAFE';
   const allStable = hasRegionalData && (highestRiskRegion?.riskScore ?? 0) < 40;
   const headlineTitle = hasRegionalData
     ? allStable
@@ -69,12 +67,6 @@ export function DashboardPage() {
     <AppShell>
       <div className="dashboard-layout">
         <section className="overview-strip">
-          <MetricTile
-            label="전체 위험 상태"
-            value={hasRegionalData ? highestRiskLabel : '수집 중'}
-            tone={highestRiskLabel === 'DANGER' ? 'danger' : highestRiskLabel === 'SAFE' ? 'neutral' : 'warning'}
-            icon={<Activity size={18} />}
-          />
           <MetricTile label="현재 선택 지역" value={selectedRegion} icon={<MapPin size={18} />} />
           <MetricTile label="활성 경보 수" value={`${incidents.length}건`} tone="danger" icon={<AlertTriangle size={18} />} />
           <MetricTile label="데이터 수집 상태" value={dataStatus} icon={<Database size={18} />} />
@@ -152,8 +144,6 @@ export function DashboardPage() {
                 )}
               </div>
             </section>
-
-            <SensorStatusPanel />
           </aside>
         </div>
       </div>
