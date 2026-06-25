@@ -341,21 +341,21 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   box-shadow: inset 3px 0 0 var(--brand-600);
 }
 
-.content { min-width: 0; padding: 20px; }
+.content { min-width: 0; padding: 14px; }
 
 /* ── 그리드 레이아웃 ──────────────────────────────────────────────────────── */
-.dashboard-layout, .page-layout { display: grid; gap: 16px; }
+.dashboard-layout, .page-layout { display: grid; gap: 12px; }
 
 .overview-strip {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .main-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 12px;
   align-items: start;
 }
 
@@ -366,12 +366,12 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   align-items: start;
 }
 
-.map-column, .right-rail { display: grid; gap: 14px; align-content: start; }
+.map-column, .right-rail { display: grid; gap: 10px; align-content: start; }
 
 /* 대시보드 지도: 뷰포트 높이 기반 */
 .map-column .map-surface {
-  height: calc(100vh - 260px);
-  min-height: 400px;
+  height: calc(100vh - 230px);
+  min-height: 360px;
 }
 
 /* ── 패널 ───────────────────────────────────────────────────────────────── */
@@ -381,12 +381,12 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   background: var(--panel);
   box-shadow: var(--shadow-sm);
 }
-.panel { padding: 18px; }
+.panel { padding: 14px; }
 
 .panel-heading {
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 12px;
   color: var(--text-muted);
 }
 
@@ -428,12 +428,12 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 /* ── 메트릭 타일 ─────────────────────────────────────────────────────────── */
 .metric-tile {
   display: grid;
-  grid-template-columns: 38px 1fr;
+  grid-template-columns: 34px 1fr;
   grid-template-rows: auto auto;
-  gap: 0 12px;
+  gap: 0 10px;
   align-items: center;
-  min-height: 72px;
-  padding: 14px 16px;
+  min-height: 58px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--panel);
@@ -446,14 +446,14 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   grid-row: 1 / 3;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-sm);
   background: var(--brand-50);
   color: var(--brand-600);
 }
-.metric-tile span { color: var(--text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
-.metric-tile strong { color: var(--text-primary); font-size: 20px; font-weight: 800; align-self: end; }
+.metric-tile span { color: var(--text-muted); font-size: 10px; font-weight: 800; text-transform: none; letter-spacing: 0; }
+.metric-tile strong { color: var(--text-primary); font-size: 18px; font-weight: 900; align-self: end; line-height: 1.15; }
 
 .metric-warning .metric-icon { background: var(--warning-bg); color: var(--warning-text); }
 .metric-danger  .metric-icon { background: var(--danger-bg);  color: var(--danger-text);  }
@@ -1178,115 +1178,6 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .data-basis-card div { display: grid; gap: 6px; margin-top: 10px; line-height: 1.6; }
 
-.risk-explain-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr);
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.risk-evidence-list, .risk-contribution-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.risk-evidence-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.risk-evidence-row span,
-.risk-contribution-row span,
-.risk-judgment-box span {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.risk-evidence-row strong {
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 800;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.risk-evidence-tone {
-  font-style: normal;
-}
-
-.risk-evidence-tone.low { color: #166534; }
-.risk-evidence-tone.medium { color: var(--warning-text); }
-.risk-evidence-tone.high { color: var(--danger-text); }
-
-.risk-judgment-box {
-  display: grid;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: #f8fafc;
-}
-
-.risk-judgment-box p {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.6;
-}
-
-.risk-confidence-note {
-  margin-top: 10px;
-  padding: 9px 10px;
-  border: 1px solid var(--warning-border);
-  border-radius: var(--radius-sm);
-  background: var(--warning-bg);
-  color: var(--warning-text);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.risk-contribution-row {
-  display: grid;
-  gap: 7px;
-}
-
-.risk-contribution-row > div:first-child {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.risk-contribution-row strong {
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 800;
-  text-align: right;
-}
-
-.risk-contribution-track {
-  overflow: hidden;
-  height: 9px;
-  border-radius: 99px;
-  background: #e5e7eb;
-}
-
-.risk-contribution-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #0f766e, #f59e0b, #dc2626);
-}
-
 .ai-risk-badge, .ai-risk-placeholder {
   display: inline-grid;
   place-items: center;
@@ -1397,32 +1288,49 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 }
 
 .region-risk-map .map-legend {
-  top: auto;
-  left: 16px;
-  bottom: 16px;
-  display: grid;
-  gap: 7px;
-  min-width: 170px;
-  padding: 12px;
+  top: 8px;
+  left: 8px;
+  bottom: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  max-width: min(360px, calc(100% - 16px));
+  min-width: 0;
+  padding: 6px 8px;
   border-color: rgba(15, 23, 42, .14);
-  background: rgba(255, 255, 255, .94);
+  background: rgba(255, 255, 255, .86);
+  backdrop-filter: blur(10px);
+  font-size: 10px;
   z-index: 20;
 }
 
 .region-risk-map .map-legend > strong {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 900;
+  margin-right: 2px;
+}
+
+.region-risk-map .legend-item {
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.region-risk-map .legend-dot {
+  width: 8px;
+  height: 8px;
+  border-width: 1px;
 }
 
 .region-risk-marker {
   display: grid;
   grid-template-columns: auto auto;
   align-items: center;
-  gap: 7px;
-  min-width: 86px;
-  min-height: 34px;
-  padding: 6px 9px 6px 7px;
+  gap: 5px;
+  min-width: 72px;
+  min-height: 30px;
+  padding: 5px 8px 5px 6px;
   border: 2px solid #fff;
   border-radius: 999px;
   background: var(--marker-color);
@@ -1436,15 +1344,15 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .region-risk-marker::before {
   content: '';
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
   background: #fff;
   opacity: .92;
 }
 
 .region-risk-marker strong {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
 }
 
@@ -1455,22 +1363,31 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 }
 
 .region-risk-marker.active {
-  min-width: 96px;
-  min-height: 38px;
+  min-width: 84px;
+  min-height: 34px;
   border-width: 3px;
   border-color: #fff;
   outline: 2px solid rgba(15, 23, 42, .35);
-  transform: translateY(-3px) scale(1.08);
+  transform: translateY(-2px) scale(1.05);
   box-shadow: 0 14px 30px rgba(15, 23, 42, .36);
 }
 
 .region-info-window {
-  width: 286px;
-  padding: 12px;
+  width: 238px;
+  padding: 10px;
   border: 1px solid rgba(15, 23, 42, .12);
   border-radius: var(--radius);
   background: #fff;
-  box-shadow: 0 16px 36px rgba(15, 23, 42, .24);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, .22);
+}
+
+.region-info-floating {
+  position: absolute;
+  top: 48px;
+  right: 10px;
+  z-index: 25;
+  max-height: calc(100% - 68px);
+  overflow-y: auto;
 }
 
 .region-info-heading {
@@ -1478,17 +1395,17 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .region-info-heading strong {
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
 }
 
 .region-info-heading span {
-  padding: 4px 8px;
+  padding: 3px 7px;
   border-radius: 999px;
   color: #fff;
   font-size: 11px;
@@ -1496,7 +1413,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 }
 
 .region-info-position-note {
-  margin: -4px 0 10px;
+  display: none;
+  margin: 0;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 800;
@@ -1506,9 +1424,9 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .region-info-grid {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 7px 10px;
+  gap: 5px 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .region-info-grid span {
@@ -1520,18 +1438,18 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   color: var(--text-primary);
   font-weight: 800;
   text-align: right;
-  max-width: 150px;
+  max-width: 118px;
   overflow-wrap: anywhere;
 }
 
 .region-info-action {
   width: 100%;
-  min-height: 34px;
+  min-height: 30px;
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--brand-600);
   color: #fff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -1542,8 +1460,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .region-info-actions {
   display: grid;
-  gap: 7px;
-  margin-top: 12px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .region-info-action.secondary {
@@ -2350,7 +2268,6 @@ input.input-invalid { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220,38,3
 
   .overview-strip,
   .risk-analysis-grid,
-  .risk-explain-grid,
   .situation-alert-grid,
   .live-visual-grid,
   .live-metric-grid,
@@ -2392,6 +2309,13 @@ input.input-invalid { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220,38,3
   .route-map,
   .layer-panel {
     min-height: 420px;
+  }
+
+  .region-info-floating {
+    top: 48px;
+    right: 8px;
+    left: 8px;
+    width: auto;
   }
 
   .risk-zone {
