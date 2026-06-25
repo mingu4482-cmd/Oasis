@@ -83,7 +83,7 @@ export interface MapLayer {
 
 // ─── 안전 경로 / 대피소 ────────────────────────────────────────────────────────
 
-export type ShelterType = '주민센터' | '학교' | '체육관' | '복지관';
+export type ShelterType = '주민센터' | '학교' | '체육관' | '복지관' | '공원' | '운동장' | '대피소';
 export type ShelterStatus = '운영 중' | '대기' | '만원';
 
 export interface Shelter {

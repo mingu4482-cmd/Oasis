@@ -40,6 +40,7 @@ function StepIcon({ type, guidance, color = '#0f766e' }: { type: number; guidanc
 
 export function ShelterList() {
   const shelters = useSafeRouteStore((s) => s.shelters);
+  const radiusFilter = useSafeRouteStore((s) => s.radiusFilter);
   const selectedId = useSafeRouteStore((s) => s.selectedShelterId);
   const activeRoute = useSafeRouteStore((s) => s.activeRoute);
   const isLoadingRoute = useSafeRouteStore((s) => s.isLoadingRoute);
@@ -48,6 +49,10 @@ export function ShelterList() {
   const isNavigating = useSafeRouteStore((s) => s.isNavigating);
   const currentStepIndex = useSafeRouteStore((s) => s.currentStepIndex);
   const autoSelectedId = useSafeRouteStore((s) => s.autoSelectedId);
+
+  const displayedShelters = radiusFilter
+    ? shelters.filter((s) => (s.distanceKm ?? Infinity) <= radiusFilter)
+    : shelters;
   const selectShelter = useSafeRouteStore((s) => s.selectShelter);
   const requestRoute = useSafeRouteStore((s) => s.requestRoute);
   const setTravelMode = useSafeRouteStore((s) => s.setTravelMode);
@@ -77,7 +82,16 @@ export function ShelterList() {
           <span>가장 가까운 운영 중 대피소 <strong>{autoSelectedShelter.name}</strong>을 자동으로 선택했습니다.</span>
         </div>
       )}
-      {shelters.map((shelter) => {
+      {displayedShelters.length === 0 && (
+        <div className="shelter-empty-state">
+          <MapPin size={28} strokeWidth={1.5} />
+          {radiusFilter
+            ? <><p>{radiusFilter}km 내 대피소가 없습니다.</p><span>반경을 늘리거나 출발지를 변경해 보세요.</span></>
+            : <><p>등록된 대피소가 없습니다.</p><span>관리자가 대피소를 등록하면 여기에 표시됩니다.</span></>
+          }
+        </div>
+      )}
+      {displayedShelters.map((shelter) => {
         const isSelected = shelter.id === selectedId;
         const rate = occupancyRate(shelter);
 

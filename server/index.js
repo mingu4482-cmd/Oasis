@@ -769,6 +769,41 @@ app.get('/api/route/walk', async (request, response) => {
   }
 });
 
+// ── 대피소 (locations 테이블 기반) ────────────────────────────────────────────
+
+function inferShelterType(name) {
+  if (/학교|초등|중학|고등|대학|유치원/.test(name)) return '학교';
+  if (/체육관|수영장|실내체육|스포츠센터|국민체육/.test(name)) return '체육관';
+  if (/복지관|노인|장애인|사회복지|문화원/.test(name)) return '복지관';
+  if (/주민센터|동사무소|구청|동주민/.test(name)) return '주민센터';
+  if (/운동장/.test(name)) return '운동장';
+  if (/공원/.test(name)) return '공원';
+  return '대피소';
+}
+
+app.get('/api/shelters', async (_request, response) => {
+  try {
+    const { rows } = await pool.query(
+      'select id, name, address, latitude, longitude from locations order by name',
+    );
+    const shelters = rows.map((row) => ({
+      id: String(row.id),
+      name: row.name,
+      address: row.address ?? '',
+      type: inferShelterType(row.name),
+      status: '운영 중',
+      capacity: 500,
+      currentOccupancy: 0,
+      lat: parseFloat(row.latitude),
+      lng: parseFloat(row.longitude),
+    }));
+    response.json(shelters);
+  } catch (err) {
+    console.error('[shelters] DB 조회 실패:', err.message);
+    response.json([]);
+  }
+});
+
 function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -789,3 +824,4 @@ ensureUsersTable().catch((error) => {
   console.error('⚠️  DB 연결 실패 — 로그인/회원가입 기능은 동작하지 않습니다.');
   console.error(error.message);
 });
+
