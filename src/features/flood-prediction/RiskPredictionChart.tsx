@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fetchRiskForecast } from '../../shared/api/aiApi';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
 import { PredictionResult } from '../../shared/types/domain';
+import { useLiveStatusQuery } from './AiPredictionPanel';
 
 const waitingPrediction: PredictionResult = {
   modelVersion: 'OASIS-FloodNet v1.0',
@@ -29,72 +31,56 @@ const formatTimestamp = (timestamp?: string) => {
   });
 };
 
-export function RiskPredictionChart() {
+interface RiskPredictionChartProps {
+  embedded?: boolean;
+}
+
+export function RiskPredictionChart({ embedded = false }: RiskPredictionChartProps) {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
-  const [livePrediction, setLivePrediction] = useState<PredictionResult>(waitingPrediction);
-  const [hasLiveData, setHasLiveData] = useState(false);
-  const activePrediction = livePrediction;
-  const chartMode = hasLiveData ? '실시간 지역 모니터링 모드' : '실시간 대기 모드';
+  const liveStatusQuery = useLiveStatusQuery(selectedRegion);
+  const liveStatus = liveStatusQuery.data;
+  const isUnavailable = liveStatus?.dataStatus === 'UNAVAILABLE';
+  const forecastQuery = useQuery({
+    queryKey: ['risk-forecast', selectedRegion],
+    queryFn: () => fetchRiskForecast(selectedRegion),
+    staleTime: 30_000,
+    enabled: liveStatusQuery.isSuccess && !isUnavailable,
+  });
 
-  const displayRisk = useMemo(() => {
-    if (activePrediction.points.length === 0) return 0;
-    return Math.round(activePrediction.points[0]?.risk ?? Math.max(...activePrediction.points.map((point) => point.risk)));
-  }, [activePrediction.points]);
+  const activePrediction = useMemo<PredictionResult>(() => {
+    const forecast = forecastQuery.data;
+    if (!forecast?.hasData) return waitingPrediction;
 
-  useEffect(() => {
-    let isMounted = true;
-    setLivePrediction(waitingPrediction);
-    setHasLiveData(false);
-
-    const loadRiskForecast = async () => {
-      try {
-        const forecast = await fetchRiskForecast(selectedRegion);
-        if (!isMounted) return;
-
-        if (!forecast.hasData) {
-          setLivePrediction(waitingPrediction);
-          setHasLiveData(false);
-          return;
-        }
-
-        setLivePrediction({
-          modelVersion: forecast.modelVersion,
-          confidence: forecast.confidence,
-          points: normalizePoints(forecast.points),
-          source: forecast.source,
-          timestamp: forecast.timestamp,
-        });
-        setHasLiveData(true);
-      } catch (error) {
-        console.error('Failed to fetch risk forecast:', error);
-        setLivePrediction(waitingPrediction);
-        setHasLiveData(false);
-      }
+    return {
+      modelVersion: forecast.modelVersion,
+      confidence: forecast.confidence,
+      riskScore: forecast.riskScore,
+      points: normalizePoints(forecast.points),
+      source: forecast.source,
+      dataStatus: forecast.dataStatus,
+      timestamp: forecast.timestamp,
     };
+  }, [forecastQuery.data]);
 
-    loadRiskForecast();
-    const interval = window.setInterval(loadRiskForecast, 30000);
+  const displayRisk = activePrediction.riskScore ?? liveStatus?.riskScore ?? 0;
 
-    return () => {
-      isMounted = false;
-      window.clearInterval(interval);
-    };
-  }, [selectedRegion]);
-
-  return (
-    <section className="panel">
+  const chartContent = (
+    <>
       <div className="panel-heading">
         <div>
-          <span className="eyebrow">{chartMode}</span>
           <h2>1~3시간 침수 위험도</h2>
         </div>
         <div className="chart-risk-summary">
           <span>선택 지역 위험도</span>
-          <strong>{displayRisk}%</strong>
+          <strong>{isUnavailable ? '-' : `${displayRisk}%`}</strong>
         </div>
       </div>
       <div className="chart-box">
-        {activePrediction.points.length > 0 ? (
+        {isUnavailable ? (
+          <div style={{ display: 'grid', height: '100%', placeItems: 'center', color: '#60706c', fontWeight: 800, textAlign: 'center', padding: 16 }}>
+            해당 지역은 현재 실시간 데이터가 부족하여 AI 위험도 분석을 제공할 수 없습니다.
+          </div>
+        ) : activePrediction.points.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={activePrediction.points} margin={{ top: 12, right: 10, left: -18, bottom: 0 }}>
               <defs>
@@ -116,10 +102,21 @@ export function RiskPredictionChart() {
           </div>
         )}
       </div>
+      {forecastQuery.isFetching || liveStatusQuery.isFetching ? <p className="model-label">데이터 갱신 중</p> : null}
       <p className="model-label">
-        분석 지역: {selectedRegion} · {activePrediction.modelVersion} · 데이터 출처: {activePrediction.source ?? '대기 중'} · 마지막 업데이트:{' '}
+        분석 지역 {selectedRegion} · 종합 위험도 기준 · {activePrediction.modelVersion} · 데이터 출처: {activePrediction.source ?? liveStatus?.source ?? '대기 중'} · 마지막 업데이트:{' '}
         {formatTimestamp(activePrediction.timestamp)}
       </p>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="embedded-risk-chart">{chartContent}</div>;
+  }
+
+  return (
+    <section className="panel">
+      {chartContent}
     </section>
   );
 }

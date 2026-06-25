@@ -1,9 +1,9 @@
-import { Activity, AlertTriangle, Clock, Database, Droplets, MapPin } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Clock, Database, Droplets, MapPin } from 'lucide-react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { IncidentTimeline } from '../../features/alert-system/IncidentTimeline';
 import { KakaoMapPanel } from '../../features/kakao-map/KakaoMapPanel';
-import { SensorStatusPanel } from '../../features/sensor-monitor/SensorStatusPanel';
 import { fetchRegionalStatus, LiveStatusResponse, RegionalStatusResponse } from '../../shared/api/aiApi';
 import { AppShell } from '../../shared/components/AppShell';
 import { MetricTile } from '../../shared/components/MetricTile';
@@ -29,6 +29,7 @@ const getRankedRegions = (regionalStatus: RegionalStatusResponse | null): Ranked
   }
 
   return Object.entries(regionalStatus.regionStatusMap)
+    .filter(([, status]) => status.dataStatus !== 'FALLBACK' && status.dataStatus !== 'UNAVAILABLE')
     .map(([regionName, status]) => ({
       ...status,
       regionName: status.targetAreaName ?? regionName,
@@ -41,36 +42,18 @@ export function DashboardPage() {
   const incidents = useDashboardStore((state) => state.activeIncidents);
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
-  const [regionalStatus, setRegionalStatus] = useState<RegionalStatusResponse | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadSummary = async () => {
-      try {
-        const data = await fetchRegionalStatus();
-        if (isMounted) {
-          setRegionalStatus(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch dashboard regional summary:', error);
-      }
-    };
-
-    loadSummary();
-    const interval = window.setInterval(loadSummary, 30000);
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(interval);
-    };
-  }, []);
+  const regionalStatusQuery = useQuery({
+    queryKey: ['regional-status'],
+    queryFn: fetchRegionalStatus,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+  const regionalStatus = regionalStatusQuery.data ?? null;
 
   const rankedRegions = useMemo(() => getRankedRegions(regionalStatus), [regionalStatus]);
   const highestRiskRegion = rankedRegions[0] ?? null;
   const top3Regions = rankedRegions.slice(0, 3);
   const hasRegionalData = rankedRegions.length > 0;
-  const highestRiskLabel = highestRiskRegion?.riskLabel ?? 'SAFE';
   const allStable = hasRegionalData && (highestRiskRegion?.riskScore ?? 0) < 40;
   const headlineTitle = hasRegionalData
     ? allStable
@@ -84,12 +67,6 @@ export function DashboardPage() {
     <AppShell>
       <div className="dashboard-layout">
         <section className="overview-strip">
-          <MetricTile
-            label="전체 위험 상태"
-            value={hasRegionalData ? highestRiskLabel : '수집 중'}
-            tone={highestRiskLabel === 'DANGER' ? 'danger' : highestRiskLabel === 'SAFE' ? 'neutral' : 'warning'}
-            icon={<Activity size={18} />}
-          />
           <MetricTile label="현재 선택 지역" value={selectedRegion} icon={<MapPin size={18} />} />
           <MetricTile label="활성 경보 수" value={`${incidents.length}건`} tone="danger" icon={<AlertTriangle size={18} />} />
           <MetricTile label="데이터 수집 상태" value={dataStatus} icon={<Database size={18} />} />
@@ -123,10 +100,6 @@ export function DashboardPage() {
                   <div className="summary-row">
                     <span>위험도</span>
                     <strong>{highestRiskRegion.riskScore}%</strong>
-                  </div>
-                  <div className="summary-row">
-                    <span>데이터 출처</span>
-                    <strong>{highestRiskRegion.source ?? 'realtime api waiting'}</strong>
                   </div>
                 </div>
               ) : (
@@ -171,8 +144,6 @@ export function DashboardPage() {
                 )}
               </div>
             </section>
-
-            <SensorStatusPanel />
           </aside>
         </div>
       </div>

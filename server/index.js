@@ -36,46 +36,94 @@ function getRegionalStatus(region) {
   return latestRegionalStatus.regionStatusMap[selectedRegion] ?? latestRegionalStatus.regionStatusMap[defaultRegion] ?? null;
 }
 
+function normalizeRiskPayload(payload) {
+  const dataStatus = payload.dataStatus ?? 'UNAVAILABLE';
+  const source = String(payload.source ?? payload.dataSource ?? '').toLowerCase();
+  const hasLowObservedRisk =
+    Number(payload.rainfall ?? 0) < 1 &&
+    Number(payload.waterLevel ?? 0) < 40 &&
+    Number(payload.waterLevelRiseRate ?? 0) <= 0;
+
+  if (dataStatus !== 'FALLBACK' && dataStatus !== 'UNAVAILABLE') {
+    if (source.includes('fallback') && hasLowObservedRisk) {
+      const riskScore = Math.min(Number(payload.riskScore ?? 0), 30);
+      return {
+        ...payload,
+        riskScore,
+        riskLabel: riskScore < 25 ? 'SAFE' : 'CAUTION',
+        message: '예보 데이터가 부족하지만 현재 강우량과 수위가 낮아 즉시 위험은 낮습니다.',
+        points: (payload.points ?? []).map((point) => ({
+          ...point,
+          risk: Math.min(Number(point.risk ?? 0), 30),
+          riskLabel: Math.min(Number(point.risk ?? 0), 30) < 25 ? 'SAFE' : 'CAUTION',
+        })),
+      };
+    }
+    return payload;
+  }
+
+  return {
+    ...payload,
+    riskScore: 0,
+    riskLabel: 'SAFE',
+    confidence: 0,
+    points: [],
+    message: '해당 지역은 현재 실시간 데이터가 부족하여 AI 위험도 분석을 제공할 수 없습니다.',
+  };
+}
+
 function toLiveStatus(payload) {
+  const normalizedPayload = normalizeRiskPayload(payload);
   return {
     hasData: true,
-    targetAreaName: payload.targetAreaName,
-    rainfall: payload.rainfall,
-    waterLevel: payload.waterLevel,
-    drainageLevel: payload.drainageLevel,
-    waterLevelRiseRate: payload.waterLevelRiseRate,
-    forecastRainfall1h: payload.forecastRainfall1h,
-    forecastRainfall2h: payload.forecastRainfall2h,
-    forecastRainfall3h: payload.forecastRainfall3h,
-    riskScore: payload.riskScore,
-    riskLabel: payload.riskLabel,
-    confidence: payload.confidence,
-    source: payload.source ?? payload.dataSource ?? 'realtime api',
-    timestamp: payload.timestamp ?? new Date().toISOString(),
-    rainfallStation: payload.rainfallStation,
-    rainfallObservedAt: payload.rainfallObservedAt,
-    drainpipeStation: payload.drainpipeStation,
-    drainpipeMeasuredAt: payload.drainpipeMeasuredAt,
-    drainpipePosition: payload.drainpipePosition,
-    rawWaterLevel: payload.rawWaterLevel,
-    forecastGrid: payload.forecastGrid,
-    fallbackReason: payload.fallbackReason,
-    warnings: payload.warnings ?? [],
+    targetAreaName: normalizedPayload.targetAreaName,
+    rainfall: normalizedPayload.rainfall,
+    waterLevel: normalizedPayload.waterLevel,
+    drainageLevel: normalizedPayload.drainageLevel,
+    waterLevelRiseRate: normalizedPayload.waterLevelRiseRate,
+    forecastRainfall1h: normalizedPayload.forecastRainfall1h,
+    forecastRainfall2h: normalizedPayload.forecastRainfall2h,
+    forecastRainfall3h: normalizedPayload.forecastRainfall3h,
+    forecastStatus: normalizedPayload.forecastStatus,
+    riskScore: normalizedPayload.riskScore,
+    riskLabel: normalizedPayload.riskLabel,
+    confidence: normalizedPayload.confidence,
+    dataStatus: normalizedPayload.dataStatus ?? 'UNAVAILABLE',
+    dataStatusMessage: normalizedPayload.dataStatusMessage,
+    message: normalizedPayload.message,
+    reasons: normalizedPayload.reasons ?? [],
+    source: normalizedPayload.source ?? normalizedPayload.dataSource ?? 'realtime api',
+    timestamp: normalizedPayload.timestamp ?? new Date().toISOString(),
+    rainfallStation: normalizedPayload.rainfallStation,
+    rainfallObservedAt: normalizedPayload.rainfallObservedAt,
+    drainpipeStation: normalizedPayload.drainpipeStation,
+    drainpipeMeasuredAt: normalizedPayload.drainpipeMeasuredAt,
+    drainpipePosition: normalizedPayload.drainpipePosition,
+    rawWaterLevel: normalizedPayload.rawWaterLevel,
+    forecastGrid: normalizedPayload.forecastGrid,
+    fallbackReason: normalizedPayload.fallbackReason,
+    warnings: normalizedPayload.warnings ?? [],
   };
 }
 
 function toRiskForecast(payload) {
+  const normalizedPayload = normalizeRiskPayload(payload);
   return {
     hasData: true,
-    region: payload.targetAreaName,
-    riskScore: payload.riskScore,
-    riskLabel: payload.riskLabel,
-    modelVersion: payload.modelVersion ?? 'OASIS-FloodNet v1.0',
-    confidence: payload.confidence ?? 0,
-    points: payload.points ?? [],
-    source: payload.source ?? payload.dataSource ?? 'realtime api',
-    timestamp: payload.timestamp ?? new Date().toISOString(),
-    targetAreaName: payload.targetAreaName,
+    region: normalizedPayload.targetAreaName,
+    riskScore: normalizedPayload.riskScore,
+    riskLabel: normalizedPayload.riskLabel,
+    forecastStatus: normalizedPayload.forecastStatus,
+    dataStatus: normalizedPayload.dataStatus ?? 'UNAVAILABLE',
+    dataStatusMessage: normalizedPayload.dataStatusMessage,
+    message: normalizedPayload.message,
+    reasons: normalizedPayload.reasons ?? [],
+    modelVersion: normalizedPayload.modelVersion ?? 'OASIS-FloodNet v1.0',
+    confidence: normalizedPayload.confidence ?? 0,
+    points: normalizedPayload.points ?? [],
+    source: normalizedPayload.source ?? normalizedPayload.dataSource ?? 'realtime api',
+    timestamp: normalizedPayload.timestamp ?? new Date().toISOString(),
+    targetAreaName: normalizedPayload.targetAreaName,
   };
 }
 
@@ -85,15 +133,15 @@ function fallbackGeneratedAlert(payload) {
       alertLevel: '정상',
       targetGroup: [],
       title: `${payload.region} 침수 위험 정상`,
-      message: '현재 침수 위험은 낮은 상태입니다.',
-      actions: ['지속 모니터링'],
+      message: '강우량과 수위가 낮아 현재 침수 위험은 낮은 상태입니다.',
+      actions: ['정기 모니터링 유지'],
     },
     CAUTION: {
       alertLevel: '관심',
       targetGroup: ['관제 담당자'],
       title: `${payload.region} 침수 위험 관심 단계`,
-      message: '침수 위험이 다소 증가했습니다. 지속적인 모니터링이 필요합니다.',
-      actions: ['강우량 및 하수관로 수위 변화 확인', '취약 지역 모니터링 유지'],
+      message: '즉시 대응이 필요한 수준은 아니지만, 관측값 변화를 확인하세요.',
+      actions: ['강우량과 하수관로 수위 추이 확인', '취약 지점 모니터링 유지'],
     },
     WARNING: {
       alertLevel: '주의',
@@ -331,6 +379,22 @@ app.post('/api/predict-risk', async (request, response) => {
 
 app.post('/api/generate-alert', async (request, response) => {
   try {
+    const riskLabel = request.body?.riskLabel;
+    const dataStatus = request.body?.dataStatus;
+    const source = String(request.body?.source ?? '').toLowerCase();
+    if (riskLabel !== 'WARNING' && riskLabel !== 'DANGER') {
+      response.json(fallbackGeneratedAlert(request.body));
+      return;
+    }
+    if (dataStatus !== 'REALTIME' && dataStatus !== 'PARTIAL') {
+      response.json(fallbackGeneratedAlert(request.body));
+      return;
+    }
+    if (source.includes('fallback')) {
+      response.json(fallbackGeneratedAlert(request.body));
+      return;
+    }
+
     const aiResponse = await axios.post(`${aiServerUrl}/generate-alert`, request.body, {
       timeout: 10000,
     });
@@ -413,7 +477,13 @@ app.get('/api/regions', (_request, response) => {
 
 app.get('/api/regional-status', (_request, response) => {
   if (latestRegionalStatus?.regionStatusMap) {
-    response.json(latestRegionalStatus);
+    const regionStatusMap = Object.fromEntries(
+      Object.entries(latestRegionalStatus.regionStatusMap).map(([region, status]) => [region, toLiveStatus(status)]),
+    );
+    response.json({
+      ...latestRegionalStatus,
+      regionStatusMap,
+    });
     return;
   }
 
@@ -444,6 +514,7 @@ app.get('/api/live-status', (request, response, next) => {
   response.json({
     hasData: false,
     message: '아직 수집된 실시간 데이터가 없습니다.',
+    dataStatus: 'UNAVAILABLE',
     source: 'realtime api waiting',
     timestamp: null,
   });
@@ -466,6 +537,7 @@ app.get('/api/risk-forecast', (request, response, next) => {
   response.json({
     hasData: false,
     message: 'No risk forecast data available',
+    dataStatus: 'UNAVAILABLE',
     source: 'realtime api waiting',
     timestamp: null,
     points: [],
@@ -479,6 +551,7 @@ app.get('/api/live-status', (_request, response) => {
     response.json({
       hasData: false,
       message: '아직 수집된 실시간 데이터가 없습니다.',
+      dataStatus: 'UNAVAILABLE',
       source: 'realtime api waiting',
       timestamp: null,
     });
@@ -492,6 +565,7 @@ app.get('/api/risk-forecast', (_request, response) => {
     response.json({
       hasData: false,
       message: 'No risk forecast data available',
+      dataStatus: 'UNAVAILABLE',
       source: 'realtime api waiting',
       timestamp: null,
       points: [],

@@ -55,9 +55,11 @@ export interface PredictionPoint {
 export interface PredictionResult {
   modelVersion: string;
   confidence: number;
+  riskScore?: number;
   points: PredictionPoint[];
   dataSource?: string;
   source?: string;
+  dataStatus?: string;
   timestamp?: string;
   fallbackUsed?: boolean;
 }

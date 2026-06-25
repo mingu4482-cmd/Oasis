@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { AiPredictionPanel } from '../../features/flood-prediction/AiPredictionPanel';
+import { AiPredictionPanel, useLiveStatusQuery } from '../../features/flood-prediction/AiPredictionPanel';
 import { RiskPredictionChart } from '../../features/flood-prediction/RiskPredictionChart';
-import { fetchLiveStatus, generateAlert, GenerateAlertResponse, LiveStatusResponse } from '../../shared/api/aiApi';
+import { generateAlert, GenerateAlertResponse, LiveStatusResponse } from '../../shared/api/aiApi';
 import { AppShell } from '../../shared/components/AppShell';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
 
@@ -33,61 +34,30 @@ function buildAlertKey(status: LiveStatusResponse, region: string) {
 
 function SituationAlertCard() {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
-  const [alert, setAlert] = useState<GenerateAlertResponse | null>(null);
-  const [status, setStatus] = useState<LiveStatusResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const lastAlertKeyRef = useRef('');
+  const liveStatusQuery = useLiveStatusQuery(selectedRegion);
+  const status = liveStatusQuery.data ?? null;
+  const isUnavailable = status?.dataStatus === 'UNAVAILABLE';
+  const isFallback = status?.dataStatus === 'FALLBACK';
 
-  const loadAlert = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const liveStatus = await fetchLiveStatus(selectedRegion);
-      setStatus(liveStatus);
+  const alertQuery = useQuery<GenerateAlertResponse>({
+    queryKey: ['generated-alert', status ? buildAlertKey(status, selectedRegion) : selectedRegion],
+    queryFn: () =>
+      generateAlert({
+        region: status?.targetAreaName ?? selectedRegion,
+        riskScore: status?.riskScore ?? 0,
+        riskLabel: status?.riskLabel ?? 'SAFE',
+        rainfall: status?.rainfall ?? 0,
+        waterLevel: status?.waterLevel ?? 0,
+        waterLevelRiseRate: status?.waterLevelRiseRate ?? 0,
+        forecastRainfall1h: status?.forecastRainfall1h ?? 0,
+        source: status?.source,
+        dataStatus: status?.dataStatus,
+      }),
+    enabled: Boolean(status?.hasData) && !isUnavailable && !isFallback,
+    staleTime: 30_000,
+  });
 
-      if (!liveStatus.hasData) {
-        setAlert(null);
-        setError('아직 알림을 생성할 실시간 위험도 데이터가 없습니다.');
-        lastAlertKeyRef.current = '';
-        return;
-      }
-
-      const nextKey = buildAlertKey(liveStatus, selectedRegion);
-      if (nextKey === lastAlertKeyRef.current) {
-        setError('');
-        return;
-      }
-
-      const generated = await generateAlert({
-        region: liveStatus.targetAreaName ?? selectedRegion,
-        riskScore: liveStatus.riskScore ?? 0,
-        riskLabel: liveStatus.riskLabel ?? 'SAFE',
-        rainfall: liveStatus.rainfall ?? 0,
-        waterLevel: liveStatus.waterLevel ?? 0,
-        waterLevelRiseRate: liveStatus.waterLevelRiseRate ?? 0,
-        forecastRainfall1h: liveStatus.forecastRainfall1h ?? 0,
-        source: liveStatus.source,
-      });
-
-      lastAlertKeyRef.current = nextKey;
-      setAlert(generated);
-      setError('');
-    } catch (alertError) {
-      console.error('Failed to generate situation alert:', alertError);
-      setError('상황별 알림 생성 중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedRegion]);
-
-  useEffect(() => {
-    lastAlertKeyRef.current = '';
-    loadAlert();
-    const interval = window.setInterval(loadAlert, 30000);
-
-    return () => window.clearInterval(interval);
-  }, [loadAlert]);
-
+  const alert = alertQuery.data ?? null;
   const isEmphasis = status?.riskLabel === 'WARNING' || status?.riskLabel === 'DANGER';
 
   return (
@@ -100,8 +70,17 @@ function SituationAlertCard() {
         <span className="alert-source-badge">{alert?.source ?? '대기 중'}</span>
       </div>
 
-      {isLoading && !alert ? <div className="alert-empty-state">알림 문구를 생성하는 중입니다.</div> : null}
-      {error ? <div className="ai-prediction-error">{error}</div> : null}
+      {liveStatusQuery.isFetching || alertQuery.isFetching ? <div className="alert-empty-state">데이터 갱신 중</div> : null}
+      {!status?.hasData && !liveStatusQuery.isFetching ? (
+        <div className="ai-prediction-error">아직 알림을 생성할 실시간 위험도 데이터가 없습니다.</div>
+      ) : null}
+      {status?.dataStatus === 'PARTIAL' || status?.dataStatus === 'FALLBACK' ? (
+        <div className="ai-prediction-error">일부 데이터가 수집되지 않아 분석 신뢰도가 낮습니다.</div>
+      ) : null}
+      {isUnavailable ? (
+        <div className="ai-prediction-error">해당 지역은 현재 실시간 데이터가 부족하여 AI 위험도 분석을 제공할 수 없습니다.</div>
+      ) : null}
+      {alertQuery.isError ? <div className="ai-prediction-error">상황별 알림 생성 중 오류가 발생했습니다.</div> : null}
 
       {alert ? (
         <div className="situation-alert-grid">
@@ -124,6 +103,14 @@ function SituationAlertCard() {
                 <li key={action}>{action}</li>
               ))}
             </ul>
+          </div>
+          <div className="summary-row">
+            <span>데이터 상태</span>
+            <strong>{status?.dataStatus ?? '-'}</strong>
+          </div>
+          <div className="summary-row">
+            <span>데이터 출처</span>
+            <strong>{status?.source ?? '-'}</strong>
           </div>
           <div className="summary-row">
             <span>생성 시각</span>
@@ -153,15 +140,10 @@ export function RiskAnalysisPage() {
   return (
     <AppShell>
       <div className="page-layout risk-analysis-page">
-        <section className="panel page-hero-panel">
-          <span className="eyebrow">공공 API 기반 예측</span>
-          <h1>AI 위험도 분석</h1>
-          <p>실시간 공공 API 기반 지역별 침수 위험도 예측</p>
-        </section>
-
         <div className="risk-analysis-layout">
-          <AiPredictionPanel />
-          <RiskPredictionChart />
+          <AiPredictionPanel>
+            <RiskPredictionChart embedded />
+          </AiPredictionPanel>
           <SituationAlertCard />
         </div>
       </div>
