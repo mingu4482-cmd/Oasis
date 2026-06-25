@@ -12,7 +12,7 @@ export function DashboardPage() {
   const incidents = useDashboardStore((state) => state.activeIncidents);
 
   return (
-    <AppShell>
+    <>
       <div className="dashboard-layout">
         <section className="overview-strip">
           <MetricTile label="활성 사고" value={`${incidents.length}건`} tone="danger" icon={<AlertTriangle size={18} />} />
@@ -32,6 +32,6 @@ export function DashboardPage() {
           </aside>
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }
