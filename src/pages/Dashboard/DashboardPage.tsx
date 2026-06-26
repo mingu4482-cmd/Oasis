@@ -5,7 +5,6 @@ import { Link } from 'react-router-dom';
 import { IncidentTimeline } from '../../features/alert-system/IncidentTimeline';
 import { KakaoMapPanel } from '../../features/kakao-map/KakaoMapPanel';
 import { fetchRegionalStatus, LiveStatusResponse, RegionalStatusResponse } from '../../shared/api/aiApi';
-import { AppShell } from '../../shared/components/AppShell';
 import { MetricTile } from '../../shared/components/MetricTile';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { SWMM_API_BASE_URL } from '../../shared/api/externalApi';
 
 declare global {
     interface Window {
@@ -20,10 +21,12 @@ const FLOOD_ZONES = [
 
 // 광화문 인근 실제 지면 고도 (건물을 안 가리도록 바닥에 깔리게 세팅)
 const BASE_ALTITUDE = 38; 
+const SWMM_API_ERROR_MESSAGE = '시뮬레이션 서버가 실행되지 않아 결과를 불러올 수 없습니다. 외부 SWMM API 서버 실행 후 다시 시도해주세요.';
 
 export const SimulationPage = () => {
     const [rainfall, setRainfall] = useState<number>(150);
     const [isSimulating, setIsSimulating] = useState<boolean>(false);
+    const [simulationError, setSimulationError] = useState<string>('');
     
     const mapRef = useRef<any>(null);
     const simIntervalRef = useRef<any>(null);
@@ -102,9 +105,11 @@ export const SimulationPage = () => {
 
         setIsSimulating(true);
         waterLevelRef.current = 0;
+        setSimulationError('');
 
         try {
-            const response = await fetch(`http://localhost:8080/api/test/swmm?rainfall=${rainfall}`);
+            const response = await fetch(`${SWMM_API_BASE_URL}/api/test/swmm?rainfall=${rainfall}`);
+            if (!response.ok) throw new Error('SWMM API 서버 연결 안 됨');
             const result = await response.json();
 
             if (result.status === 'success') {
@@ -120,10 +125,13 @@ export const SimulationPage = () => {
                         clearInterval(simIntervalRef.current);
                     }
                 }, 50);
+            } else {
+                throw new Error('SWMM API 응답 형식 오류');
             }
         } catch (error) {
             console.error("🚨 시뮬레이션 에러:", error);
             setIsSimulating(false);
+            setSimulationError(SWMM_API_ERROR_MESSAGE);
         }
     };
 
@@ -142,6 +150,11 @@ export const SimulationPage = () => {
                 <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#cbd5e1' }}>
                     예상 강우량에 따른 도로 침수 위험도를 시각화합니다.
                 </p>
+                {simulationError ? (
+                    <div style={{ marginBottom: '16px', padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(127, 29, 29, 0.55)', color: '#fecaca', fontSize: '13px', lineHeight: 1.5 }}>
+                        {simulationError}
+                    </div>
+                ) : null}
                 
                 <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: '8px' }}>
                     <label style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>예상 폭우량 (mm/h)</label>

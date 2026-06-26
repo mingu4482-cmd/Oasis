@@ -4,7 +4,6 @@ import { useSearchParams } from 'react-router-dom';
 import { AiPredictionPanel, useLiveStatusQuery } from '../../features/flood-prediction/AiPredictionPanel';
 import { RiskPredictionChart } from '../../features/flood-prediction/RiskPredictionChart';
 import { generateAlert, GenerateAlertResponse, LiveStatusResponse } from '../../shared/api/aiApi';
-import { AppShell } from '../../shared/components/AppShell';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
 
 const formatTimestamp = (timestamp?: string) => {
@@ -138,15 +137,13 @@ export function RiskAnalysisPage() {
   }, [regionFromQuery, setSelectedRegion]);
 
   return (
-    <AppShell>
-      <div className="page-layout risk-analysis-page">
-        <div className="risk-analysis-layout">
-          <AiPredictionPanel>
-            <RiskPredictionChart embedded />
-          </AiPredictionPanel>
-          <SituationAlertCard />
-        </div>
+    <div className="page-layout risk-analysis-page">
+      <div className="risk-analysis-layout">
+        <AiPredictionPanel>
+          <RiskPredictionChart embedded />
+        </AiPredictionPanel>
+        <SituationAlertCard />
       </div>
-    </AppShell>
+    </div>
   );
 }
