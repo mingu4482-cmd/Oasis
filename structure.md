@@ -4,7 +4,8 @@ OASIS는 공공 API 기반 침수 위험도 수집, AI 예측, 상황별 알림 
 
 ## 루트 파일
 
-- `.env.local`: Express 서버, DB, 카카오 지도, 선택적 경로 API 환경 변수
+- `.env.local`: Express 서버, DB, 카카오 지도, 외부 센서/SWMM, 선택적 경로 API 환경 변수
+- `.env.local.example`: 로컬 개발용 환경 변수 템플릿
 - `.editorconfig`: UTF-8, CRLF 등 편집기 기본 설정
 - `.gitignore`: Git 추적 제외 설정
 - `index.html`: Vite SPA 진입 HTML, CRA `%PUBLIC_URL%` 문법 없이 Vite 방식으로 관리
@@ -52,6 +53,8 @@ Oasis/
 │  └─ Cesium/
 ├─ scripts/
 │  └─ import_locations.py
+├─ sim/
+│  └─ swmm_server.py
 ├─ src/
 │  ├─ app/
 │  ├─ assets/
@@ -127,6 +130,10 @@ Express API 게이트웨이입니다.
 
 - `import_locations.py`: 대피소/위치 데이터를 PostgreSQL `locations` 테이블에 적재하는 보조 스크립트
 
+## sim
+
+- `swmm_server.py`: 로컬 테스트용 FastAPI SWMM 목 서버. `POST /run-swmm`으로 강우량을 받아 가상 맨홀 수위를 반환합니다. 실제 화면의 `/simulation`은 현재 `VITE_SWMM_API_BASE_URL` 기준 `/api/test/swmm?rainfall=...`를 호출하므로, Java/Spring 또는 별도 SWMM 백엔드와 함께 사용할 수 있습니다.
+
 ## src/app
 
 - `App.tsx`: 라우터를 렌더링하는 앱 루트
@@ -200,6 +207,7 @@ Express API 게이트웨이입니다.
 - `api/client.ts`: Axios 기본 클라이언트, 기본 baseURL은 `/api`
 - `api/aiApi.ts`: 위험도 예측, 지역 상태, 위험도 차트, 상황별 알림 API
 - `api/authApi.ts`: 로그인, 회원가입, 로그아웃 API
+- `api/externalApi.ts`: 외부 맨홀 센서 API와 SWMM API 기본 주소 관리
 - `components/AppShell.tsx`: 상단바, 사이드바, 공통 레이아웃
 - `components/MetricTile.tsx`: 지표 카드
 - `components/RoleGuard.tsx`: 역할 기반 접근 제어
@@ -260,9 +268,9 @@ PostgreSQL locations / 카카오모빌리티 / T맵 API / OSRM fallback
 ```text
 React MapViewPage / DigitalTwinPage / SimulationPage
         ↓
-외부 8080 백엔드
-  ├─ MapViewPage / DigitalTwinPage: GET http://192.168.0.108:8080/api/manholes
-  └─ SimulationPage: GET http://localhost:8080/api/test/swmm?rainfall=...
+외부 센서/SWMM 백엔드
+  ├─ MapViewPage / DigitalTwinPage: GET {VITE_EXTERNAL_SENSOR_API_BASE_URL}/api/manholes
+  └─ SimulationPage: GET {VITE_SWMM_API_BASE_URL}/api/test/swmm?rainfall=...
         ↓
 Kakao 지도 또는 VWorld/Cesium 화면
 ```
@@ -276,6 +284,8 @@ Kakao 지도 또는 VWorld/Cesium 화면
 - `DATABASE_URL`: PostgreSQL 연결 문자열
 - `VITE_API_BASE_URL`: 프론트엔드 Axios 기본 API 주소, 기본값 `/api`
 - `VITE_KAKAO_MAP_KEY`: 브라우저에서 사용하는 카카오 지도 JavaScript 키
+- `VITE_EXTERNAL_SENSOR_API_BASE_URL`: MapView/DigitalTwin 맨홀 센서 API 기본 주소, 기본값 `http://localhost:8080`
+- `VITE_SWMM_API_BASE_URL`: Simulation SWMM 테스트 API 기본 주소, 기본값 `http://localhost:8080`
 - `KAKAO_REST_API_KEY`: Express 서버에서 사용하는 카카오모빌리티 REST API 키
 - `TMAP_APP_KEY`: Express 서버에서 사용하는 T맵 보행자 경로 API 키
 
