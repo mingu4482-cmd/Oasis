@@ -1,6 +1,7 @@
 import { Activity, AlertTriangle, CloudRain, MapPin, Waves } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { Map, Circle } from 'react-kakao-maps-sdk'; // 🌟 카카오맵 SDK 추가
+import { EXTERNAL_SENSOR_API_BASE_URL } from '../../shared/api/externalApi';
 import { REGION_COORDINATES } from '../../shared/constants/regionCoordinates';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
 
@@ -22,6 +23,8 @@ interface Manhole {
     waterLevel: number;
 }
 
+const SENSOR_API_ERROR_MESSAGE = '외부 하수관로 센서 API에 연결할 수 없습니다. 현재는 서울시 공공 API 기반 위험도만 표시됩니다.';
+
 export const MapViewPage = () => {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
@@ -33,16 +36,20 @@ export const MapViewPage = () => {
 
   // 🌟 동생이 만든 실시간 벡엔드 연동 로직
   const [manholes, setManholes] = useState<Manhole[]>([]);
+  const [sensorApiError, setSensorApiError] = useState('');
   useEffect(() => {
       const fetchData = async () => {
           try {
-              const response = await fetch('http://localhost:8080/api/manholes');
+              const response = await fetch(`${EXTERNAL_SENSOR_API_BASE_URL}/api/manholes`);
               if (!response.ok) throw new Error('API 서버 연결 안 됨');
               const data: Manhole[] = await response.json();
               const validData = data.filter(m => m.latitude !== 0 && m.latitude !== null);
               setManholes(validData);
+              setSensorApiError('');
           } catch (e) {
               console.error("🚨 백엔드 연결 실패!", e);
+              setManholes([]);
+              setSensorApiError(SENSOR_API_ERROR_MESSAGE);
           }
       };
       fetchData();
@@ -126,6 +133,12 @@ export const MapViewPage = () => {
               <MapPin size={16} />
               <span>※ 지도 마커는 자치구별 위험도를 표시하기 위한 대표 위치 기준이며, 실제 침수 발생 지점을 의미하지 않습니다.</span>
             </div>
+            {sensorApiError ? (
+              <div className="control-panel-note map-coordinate-note">
+                <AlertTriangle size={16} />
+                <span>{sensorApiError}</span>
+              </div>
+            ) : null}
           </aside>
 
           {/* 🌟 동생의 실시간 카카오 히트맵을 팀원 UI 공간에 렌더링! */}
@@ -150,6 +163,7 @@ export const MapViewPage = () => {
                           );
                       })}
               </Map>
+              {sensorApiError ? <div className="region-map-error">{sensorApiError}</div> : null}
           </div>
 
         </div>

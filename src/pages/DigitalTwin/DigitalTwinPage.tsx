@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Map, CustomOverlayMap } from 'react-kakao-maps-sdk';
+import { EXTERNAL_SENSOR_API_BASE_URL } from '../../shared/api/externalApi';
 
 interface Manhole {
     locationId: number;
@@ -9,22 +10,29 @@ interface Manhole {
     waterLevel: number;
 }
 
+const SENSOR_API_ERROR_MESSAGE = '외부 하수관로 센서 API에 연결할 수 없습니다. 현재는 서울시 공공 API 기반 위험도만 표시됩니다.';
+
 export const DigitalTwinPage = () => {
     const [manholes, setManholes] = useState<Manhole[]>([]);
     const [sensorCount, setSensorCount] = useState(0);
+    const [sensorApiError, setSensorApiError] = useState('');
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch('http://localhost:8080/api/manholes');
+                const response = await fetch(`${EXTERNAL_SENSOR_API_BASE_URL}/api/manholes`);
                 if (!response.ok) throw new Error('API 서버 연결 안 됨');
                 const data: Manhole[] = await response.json();
                 
                 const validData = data.filter(m => m.latitude !== 0 && m.latitude !== null);
                 setManholes(validData);
                 setSensorCount(validData.length);
+                setSensorApiError('');
             } catch (e) {
                 console.error("🚨 백엔드 연결 실패!", e);
+                setManholes([]);
+                setSensorCount(0);
+                setSensorApiError(SENSOR_API_ERROR_MESSAGE);
             }
         };
 
@@ -52,6 +60,9 @@ export const DigitalTwinPage = () => {
             }}>
                 <h2>🌐 하수도 디지털 트윈 상세 관제</h2>
                 <p>모니터링 중인 맨홀: <b>{sensorCount}</b> 개</p>
+                {sensorApiError ? (
+                    <p style={{ color: '#fca5a5', maxWidth: '360px', lineHeight: 1.5 }}>{sensorApiError}</p>
+                ) : null}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '10px', fontSize: '13px' }}>
                     <span style={{ color: '#ef4444' }}>● 심각 (90cm 이상)</span>
                     <span style={{ color: '#f59e0b' }}>● 경계 (60cm ~ 90cm)</span>

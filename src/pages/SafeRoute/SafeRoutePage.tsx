@@ -1,5 +1,4 @@
 import { LocateFixed, Navigation } from 'lucide-react';
-import { AppShell } from '../../shared/components/AppShell';
 import { ShelterMapPanel } from '../../features/safe-route/ShelterMapPanel';
 import { ShelterList } from '../../features/safe-route/ShelterList';
 import { useSafeRouteStore } from '../../features/safe-route/safeRouteStore';
@@ -18,43 +17,41 @@ export function SafeRoutePage() {
   const selectedShelter = shelters.find((s) => s.id === selectedId);
 
   return (
-    <AppShell>
-      <div className="page-layout two-column">
-        <ShelterMapPanel />
+    <div className="page-layout two-column">
+      <ShelterMapPanel />
 
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">시민 안내</span>
-              <h2>안전 경로 산출</h2>
-            </div>
-            <Navigation size={20} aria-hidden="true" />
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">시민 안내</span>
+            <h2>안전 경로 산출</h2>
           </div>
+          <Navigation size={20} aria-hidden="true" />
+        </div>
 
-          <div className="route-summary">
-            <div>
-              <LocateFixed size={18} aria-hidden="true" />
-              <span>현재 위치 기준</span>
-              <strong>
-                {selectedShelter
-                  ? `${selectedShelter.name}까지 ${selectedShelter.distanceKm}km`
-                  : '대피소를 선택하세요'}
-              </strong>
-            </div>
-            <div>
-              <Navigation size={18} aria-hidden="true" />
-              <span>침수 위험 회피</span>
-              <strong>
-                {activeRoute
-                  ? `예상 이동 ${formatDuration(activeRoute.durationSec)}`
-                  : '경로 안내 대기 중'}
-              </strong>
-            </div>
+        <div className="route-summary">
+          <div>
+            <LocateFixed size={18} aria-hidden="true" />
+            <span>현재 위치 기준</span>
+            <strong>
+              {selectedShelter
+                ? `${selectedShelter.name}까지 ${selectedShelter.distanceKm}km`
+                : '대피소를 선택하세요'}
+            </strong>
           </div>
+          <div>
+            <Navigation size={18} aria-hidden="true" />
+            <span>침수 위험 회피</span>
+            <strong>
+              {activeRoute
+                ? `예상 이동 ${formatDuration(activeRoute.durationSec)}`
+                : '경로 안내 대기 중'}
+            </strong>
+          </div>
+        </div>
 
-          <ShelterList />
-        </section>
-      </div>
-    </AppShell>
+        <ShelterList />
+      </section>
+    </div>
   );
 }
