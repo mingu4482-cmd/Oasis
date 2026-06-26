@@ -1,6 +1,6 @@
 # OASIS 프로젝트 구조
 
-OASIS는 공공 API 기반 침수 위험도 수집, AI 예측, 상황별 알림 생성, 지도/대피 경로 화면을 제공하는 React + Express + FastAPI 프로젝트입니다. 실제 앱 루트는 `C:\dev_source\Oasis\Oasis`입니다.
+OASIS는 공공 API 기반 침수 위험도 수집, AI 예측, 상황별 알림 생성, 지도/대피 경로 화면을 제공하는 React + Express + FastAPI + Spring Boot 프로젝트입니다. 실제 앱 루트는 `C:\dev_source\Oasis\Oasis`입니다.
 
 ## 루트 파일
 
@@ -8,6 +8,7 @@ OASIS는 공공 API 기반 침수 위험도 수집, AI 예측, 상황별 알림 
 - `.env.local.example`: 로컬 개발용 환경 변수 템플릿
 - `.editorconfig`: UTF-8, CRLF 등 편집기 기본 설정
 - `.gitignore`: Git 추적 제외 설정
+- `HELP.md`: Spring Initializr가 생성한 참고 문서
 - `index.html`: Vite SPA 진입 HTML, CRA `%PUBLIC_URL%` 문법 없이 Vite 방식으로 관리
 - `locations_insert.sql`: 대피소/위치 데이터 적재용 SQL
 - `package.json`: npm 의존성 및 개발 스크립트
@@ -47,6 +48,20 @@ Oasis/
 │  ├─ requirements.txt
 │  ├─ scheduler.py
 │  └─ train.py
+├─ oasis_spring/
+│  ├─ gradle/wrapper/
+│  ├─ src/main/java/com/smu/backend/
+│  │  ├─ controller/
+│  │  ├─ dto/
+│  │  ├─ mapper/
+│  │  └─ service/
+│  ├─ src/main/resources/
+│  │  ├─ mapper/
+│  │  └─ application.yml
+│  ├─ build.gradle
+│  ├─ gradlew
+│  ├─ gradlew.bat
+│  └─ settings.gradle
 ├─ server/
 │  └─ index.js
 ├─ public/
@@ -106,6 +121,45 @@ FastAPI AI 서버와 Python 스케줄러가 있는 영역입니다.
   - 테스트용 `risk_model.pkl` 생성 스크립트
 - `.env.example`
   - 서울시, 기상청, Express 전송, OpenAI 알림 설정 예시
+
+## oasis_spring
+
+Spring Boot 기반 센서/SWMM 백엔드입니다.
+
+- `build.gradle`
+  - Spring Boot 3.5.15
+  - Java 21 toolchain
+  - Spring Web, MyBatis, PostgreSQL, Lombok 의존성
+- `src/main/resources/application.yml`
+  - PostgreSQL datasource
+  - HikariCP connection pool
+  - MyBatis mapper 경로와 snake_case to camelCase 설정
+  - 실제 DB 비밀 값이 들어갈 수 있으므로 커밋 전 분리 또는 마스킹 필요
+- `BackendApplication.java`
+  - Spring Boot 애플리케이션 진입점
+- `controller/ManholeController.java`
+  - `GET /api/manholes`
+  - `locations`와 최신 `sensor_logs`를 조인한 맨홀 좌표/수위 목록 반환
+- `controller/SensorLogController.java`
+  - `GET /api/sensors/latest`
+  - 지역별 최신 센서 로그 반환
+- `controller/TestController.java`
+  - `GET /api/test/swmm?rainfall=...`
+  - Python SWMM 목 서버의 `POST /run-swmm` 호출 결과 반환
+- `controller/GeoUpdateController.java`
+  - `GET /api/geo-update`
+  - `locations` 주소를 카카오 로컬 검색으로 좌표 변환 후 DB 업데이트
+- `service/SeoulWaterLevelService.java`
+  - Spring 시작 시 1회, 이후 10분마다 서울시 하수관로 수위 API 수집
+  - 신규 센서를 `locations`에 등록하고 `sensor_logs`에 수위 저장
+- `service/KakaoGeoService.java`
+  - 카카오 로컬 검색 API로 주소를 위도/경도 좌표로 변환
+- `service/SwmmService.java`
+  - `http://localhost:8000/run-swmm` Python SWMM 목 서버 호출
+- `mapper/SensorLogMapper.java`, `resources/mapper/SensorLogMapper.xml`
+  - `locations`, `sensor_logs` 조회/삽입/좌표 업데이트 SQL
+- `dto/SensorLogDTO.java`
+  - 센서 로그, 맨홀 이름, 위도/경도, 수위 응답 DTO
 
 ## server
 
@@ -187,13 +241,13 @@ Express API 게이트웨이입니다.
   - 자동차/도보 경로 안내
 - `MapView/MapViewPage.tsx`
   - 선택 지역과 지도 레이어 토글
-  - 외부 `http://192.168.0.108:8080/api/manholes` 데이터를 기반으로 하수관로 수위 반경 표시
+  - `VITE_EXTERNAL_SENSOR_API_BASE_URL`의 `/api/manholes` 데이터를 기반으로 하수관로 수위 반경 표시
   - `selectedRegion`을 공유 store에 반영
 - `DigitalTwin/DigitalTwinPage.tsx`
-  - 외부 `http://192.168.0.108:8080/api/manholes` 데이터를 카카오 지도 위에 수위별 마커로 표시
+  - `VITE_EXTERNAL_SENSOR_API_BASE_URL`의 `/api/manholes` 데이터를 카카오 지도 위에 수위별 마커로 표시
 - `Simulation/SimulationPage.tsx`
   - VWorld WebGL/Cesium 기반 침수 시뮬레이션 화면
-  - 외부 `http://localhost:8080/api/test/swmm?rainfall=...` 호출
+  - `VITE_SWMM_API_BASE_URL`의 `/api/test/swmm?rainfall=...` 호출
   - 예상 강우량 슬라이더와 침수 구역 polygon 시각화
 - `AlertCenter/AlertCenterPage.tsx`
   - 경보 관리 화면
@@ -268,11 +322,27 @@ PostgreSQL locations / 카카오모빌리티 / T맵 API / OSRM fallback
 ```text
 React MapViewPage / DigitalTwinPage / SimulationPage
         ↓
-외부 센서/SWMM 백엔드
+Spring Boot 센서/SWMM 백엔드
   ├─ MapViewPage / DigitalTwinPage: GET {VITE_EXTERNAL_SENSOR_API_BASE_URL}/api/manholes
   └─ SimulationPage: GET {VITE_SWMM_API_BASE_URL}/api/test/swmm?rainfall=...
         ↓
+PostgreSQL sensor_logs/locations 또는 Python SWMM 목 서버
+        ↓
 Kakao 지도 또는 VWorld/Cesium 화면
+```
+
+Spring 센서 수집 흐름:
+
+```text
+서울시 하수관로 수위 API
+        ↓
+oasis_spring SeoulWaterLevelService
+        ↓
+PostgreSQL locations / sensor_logs
+        ↓
+GET /api/manholes, GET /api/sensors/latest
+        ↓
+React MapViewPage / DigitalTwinPage
 ```
 
 ## 주요 환경 변수
@@ -322,3 +392,10 @@ FastAPI:
 - `GET /health`
 - `POST /predict`
 - `POST /generate-alert`
+
+Spring Boot:
+
+- `GET /api/manholes`
+- `GET /api/sensors/latest`
+- `GET /api/test/swmm?rainfall=...`
+- `GET /api/geo-update`
