@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres
+    username: postgres.crumwuakoqnfjelfvuco
+    password: dhdktltm1234
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 30000
+      max-lifetime: 580000 # DB가 끊기 전에 스프링이 먼저 안전하게 연결을 새로고침함 (보통 10분보다 살짝 짧게)
+      keepalive-time: 30000 # 30초마다 DB한테 "나 살아있어!" 하고 핑을 보냄
+
+mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
