@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.smu.backend.mapper.SensorLogMapper">
+
+    <insert id="insertSensorLog" parameterType="com.smu.backend.dto.SensorLogDTO">
+        INSERT INTO sensor_logs (
+        location_id, water_level, temperature, humidity, measured_at
+        ) VALUES (
+        #{locationId}, #{waterLevel}, #{temperature}, #{humidity}, NOW()
+        )
+    </insert>
+
+    <select id="getLatestLogByLocationId" resultType="com.smu.backend.dto.SensorLogDTO">
+        SELECT
+        id,
+        location_id,
+        water_level,
+        temperature,
+        humidity,
+        measured_at
+        FROM sensor_logs
+        WHERE location_id = #{locationId}
+        ORDER BY measured_at DESC
+        LIMIT 1
+    </select>
+
+    <select id="getLatestLogsForAllLocations" resultType="com.smu.backend.dto.SensorLogDTO">
+        SELECT DISTINCT ON (location_id)
+        id,
+        location_id,
+        water_level,
+        temperature,
+        humidity,
+        measured_at
+        FROM sensor_logs
+        ORDER BY location_id, measured_at DESC
+    </select>
+
+    <select id="existsLocation" resultType="boolean">
+        SELECT EXISTS(SELECT 1 FROM locations WHERE id = #{id})
+    </select>
+
+    <insert id="insertLocation">
+        INSERT INTO locations (id, name)
+        VALUES (#{id}, #{name})
+            ON CONFLICT (id) DO NOTHING
+    </insert>
+
+    <select id="getLatestManholeData" resultType="com.smu.backend.dto.SensorLogDTO">
+        SELECT
+            l.id::numeric as locationId,
+            l.name as name,
+            -- 💡 l.latitude가 문자열일 경우를 대비해 ::numeric 으로 강제 숫자 변환 후 비교!
+            CASE WHEN l.latitude::numeric = 0.0 THEN 37.5735 ELSE l.latitude::numeric END as latitude,
+        CASE WHEN l.longitude::numeric = 0.0 THEN 126.9782 ELSE l.longitude::numeric END as longitude,
+        COALESCE(s.water_level, 0) as waterLevel
+    FROM locations l
+    LEFT JOIN (
+        SELECT DISTINCT ON (location_id) location_id, water_level
+        FROM sensor_logs
+        ORDER BY location_id, measured_at DESC
+    ) s ON l.id::numeric = s.location_id::numeric
+    </select>
+
+    <select id="getAllLocations" resultType="com.smu.backend.dto.SensorLogDTO">
+        SELECT id as locationId, name FROM locations
+    </select>
+
+    <update id="updateLocationCoordinate">
+        UPDATE locations
+        SET latitude = #{latitude}, longitude = #{longitude}
+        WHERE id::numeric = #{locationId}::numeric
+    </update>
+</mapper>
