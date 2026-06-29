@@ -31,13 +31,6 @@ const RISK_LABEL_KO: Record<RiskLabel, string> = {
   DANGER: '위험',
 };
 
-const DATA_STATUS_LABEL: Record<string, string> = {
-  REALTIME: '실시간',
-  PARTIAL: '일부 수집',
-  FALLBACK: 'fallback',
-  UNAVAILABLE: '계산 불가',
-};
-
 const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
   if (status?.riskLabel === 'SAFE' || status?.riskLabel === 'CAUTION' || status?.riskLabel === 'WARNING' || status?.riskLabel === 'DANGER') {
     return status.riskLabel;
@@ -312,8 +305,6 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
             ) : null}
             <span>예보 강수량</span>
             <strong>{formatForecastRainfall(activeItem.status)}</strong>
-            <span>데이터 출처</span>
-            <strong>{activeItem.status?.source ?? DATA_STATUS_LABEL[activeItem.status?.dataStatus ?? 'UNAVAILABLE'] ?? '-'}</strong>
           </div>
           <div className="region-info-actions">
             <button type="button" className="region-info-action" onClick={() => openRiskAnalysis(activeItem.name)}>
