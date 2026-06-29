@@ -1,9 +1,11 @@
-import { Activity, AlertTriangle, Clock, Database, Droplets, MapPin, Waves } from 'lucide-react';
+import { Activity, AlertTriangle, Clock, Database, Droplets, MapPin, Route as RouteIcon, Waves } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { IncidentTimeline } from '../../features/alert-system/IncidentTimeline';
 import { KakaoMapPanel } from '../../features/kakao-map/KakaoMapPanel';
+import { ShelterList } from '../../features/safe-route/ShelterList';
+import { useSafeRouteStore } from '../../features/safe-route/safeRouteStore';
 import { fetchRegionalStatus, LiveStatusResponse, RegionalStatusResponse } from '../../shared/api/aiApi';
 import { MetricTile } from '../../shared/components/MetricTile';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
@@ -13,11 +15,12 @@ type RankedRegion = LiveStatusResponse & {
   riskScore: number;
 };
 
-type DashboardLayerId = 'regionalRisk' | 'waterLevel';
+type DashboardMapMode = 'regionalRisk' | 'waterLevel' | 'safeRoute';
 
-const DASHBOARD_MAP_LAYERS = [
+const DASHBOARD_MAP_MODES = [
   { id: 'regionalRisk', label: '위험도', icon: Activity },
   { id: 'waterLevel', label: '맨홀 위치', icon: Waves },
+  { id: 'safeRoute', label: '안전경로', icon: RouteIcon },
 ] as const;
 
 const formatTimestamp = (timestamp?: string | null) => {
@@ -28,6 +31,12 @@ const formatTimestamp = (timestamp?: string | null) => {
     second: '2-digit',
   });
 };
+
+function formatDuration(sec: number) {
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}분`;
+  return `${Math.floor(min / 60)}시간 ${min % 60}분`;
+}
 
 const getRankedRegions = (regionalStatus: RegionalStatusResponse | null): RankedRegion[] => {
   if (!regionalStatus?.hasData || !regionalStatus.regionStatusMap) {
@@ -48,10 +57,10 @@ export function DashboardPage() {
   const incidents = useDashboardStore((state) => state.activeIncidents);
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
-  const [mapLayers, setMapLayers] = useState<Record<DashboardLayerId, boolean>>({
-    regionalRisk: true,
-    waterLevel: false,
-  });
+  const [mapMode, setMapMode] = useState<DashboardMapMode>('regionalRisk');
+  const activeRoute = useSafeRouteStore((state) => state.activeRoute);
+  const shelters = useSafeRouteStore((state) => state.shelters);
+  const selectedShelterId = useSafeRouteStore((state) => state.selectedShelterId);
   const regionalStatusQuery = useQuery({
     queryKey: ['regional-status'],
     queryFn: fetchRegionalStatus,
@@ -72,12 +81,13 @@ export function DashboardPage() {
     : '데이터 수집 중';
   const dataStatus = hasRegionalData ? '수집 중' : '데이터 수집 중';
   const lastUpdated = highestRiskRegion?.timestamp ?? regionalStatus?.timestamp;
+  const selectedShelter = shelters.find((shelter) => shelter.id === selectedShelterId);
 
-  const toggleMapLayer = (layerId: DashboardLayerId) => {
-    setMapLayers((current) => ({
-      ...current,
-      [layerId]: !current[layerId],
-    }));
+  const mapLayerVisibility = {
+    regionalRisk: mapMode === 'regionalRisk',
+    waterLevel: mapMode === 'waterLevel',
+    safeRoute: mapMode === 'safeRoute',
+    rainfall: true,
   };
 
   return (
@@ -92,24 +102,25 @@ export function DashboardPage() {
       <div className="main-grid">
         <div className="map-column">
           <KakaoMapPanel
-            layerVisibility={{ ...mapLayers, rainfall: true }}
-            mapControls={DASHBOARD_MAP_LAYERS.map((layer) => {
-              const Icon = layer.icon;
-              const isActive = mapLayers[layer.id];
+            layerVisibility={mapLayerVisibility}
+            mapControls={DASHBOARD_MAP_MODES.map((mode) => {
+              const Icon = mode.icon;
+              const isActive = mapMode === mode.id;
 
               return (
                 <label
-                  key={layer.id}
+                  key={mode.id}
                   className={isActive ? 'dashboard-map-layer-chip active' : 'dashboard-map-layer-chip'}
-                  title={`${layer.label} ${isActive ? '끄기' : '켜기'}`}
+                  title={`${mode.label} 보기`}
                 >
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="dashboard-map-mode"
                     checked={isActive}
-                    onChange={() => toggleMapLayer(layer.id)}
+                    onChange={() => setMapMode(mode.id)}
                   />
                   <Icon size={16} />
-                  <span>{layer.label}</span>
+                  <span>{mode.label}</span>
                 </label>
               );
             })}
@@ -117,6 +128,30 @@ export function DashboardPage() {
           <IncidentTimeline />
         </div>
         <aside className="right-rail">
+          {mapMode === 'safeRoute' ? (
+            <section className="panel dashboard-safe-route-panel">
+              <div className="panel-heading">
+                <div>
+                  <span className="eyebrow">안전 경로</span>
+                  <h2>대피소 경로 안내</h2>
+                </div>
+                <RouteIcon size={20} />
+              </div>
+              <div className="route-summary">
+                <div>
+                  <MapPin size={18} aria-hidden="true" />
+                  <span>선택 대피소</span>
+                  <strong>{selectedShelter ? `${selectedShelter.name} · ${selectedShelter.distanceKm ?? '-'}km` : '대피소를 선택하세요'}</strong>
+                </div>
+                <div>
+                  <RouteIcon size={18} aria-hidden="true" />
+                  <span>경로 상태</span>
+                  <strong>{activeRoute ? `예상 이동 ${formatDuration(activeRoute.durationSec)}` : '경로 안내 대기 중'}</strong>
+                </div>
+              </div>
+              <ShelterList />
+            </section>
+          ) : null}
           <section className="panel">
             <div className="panel-heading">
               <div>

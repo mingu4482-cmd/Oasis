@@ -8,7 +8,6 @@ import {
   LogIn,
   LogOut,
   Menu,
-  Route,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -39,7 +38,6 @@ const navGroups: NavGroup[] = [
     icon: Bell,
     items: [
       { to: '/alerts', label: '경보 관리', icon: Bell, roles: ['ADMIN'] },
-      { to: '/safe-route', label: '안전 경로', icon: Route, roles: ['GUEST', 'USER', 'ADMIN'] },
     ],
   },
   {

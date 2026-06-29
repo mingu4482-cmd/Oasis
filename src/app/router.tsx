@@ -3,7 +3,6 @@ import { AlertCenterPage } from '../pages/AlertCenter/AlertCenterPage';
 import { DashboardPage } from '../pages/Dashboard/DashboardPage';
 import { ReportsPage } from '../pages/Reports/ReportsPage';
 import { RiskAnalysisPage } from '../pages/RiskAnalysis/RiskAnalysisPage';
-import { SafeRoutePage } from '../pages/SafeRoute/SafeRoutePage';
 import { SimulationPage } from '../pages/Simulation/SimulationPage';
 import { SignupPage } from '../pages/Signup/SignupPage';
 import { LoginPage } from '../pages/Login/LoginPage';
@@ -28,7 +27,7 @@ export const routes: RouteObject[] = [
       { path: 'risk-analysis', element: <RoleGuard><RiskAnalysisPage /></RoleGuard> },
       { path: 'alerts', element: <RoleGuard><AlertCenterPage /></RoleGuard> },
       { path: 'reports', element: <RoleGuard><ReportsPage /></RoleGuard> },
-      { path: 'safe-route', element: <RoleGuard><SafeRoutePage /></RoleGuard> },
+      { path: 'safe-route', element: <Navigate to="/dashboard" replace /> },
       { path: 'simulation', element: <RoleGuard><SimulationPage /></RoleGuard> },
     ],
   },
