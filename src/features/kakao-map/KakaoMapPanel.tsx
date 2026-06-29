@@ -6,6 +6,7 @@ interface KakaoMapPanelProps {
     regionalRisk: boolean;
     waterLevel: boolean;
     rainfall: boolean;
+    safeRoute?: boolean;
   };
   mapControls?: ReactNode;
 }
