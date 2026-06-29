@@ -1,9 +1,10 @@
 import { Fragment, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CustomOverlayMap, Map as KakaoMap, Polygon, useKakaoLoader } from 'react-kakao-maps-sdk';
+import { Circle, CustomOverlayMap, Map as KakaoMap, Polygon, useKakaoLoader } from 'react-kakao-maps-sdk';
 import { useNavigate } from 'react-router-dom';
 import { fetchRegionalStatus, LiveStatusResponse, RiskLabel } from '../../shared/api/aiApi';
+import { EXTERNAL_SENSOR_API_BASE_URL } from '../../shared/api/externalApi';
 import { REGION_COORDINATES, findRegionCoordinate } from '../../shared/constants/regionCoordinates';
 import { SEOUL_DISTRICT_BOUNDARIES } from '../../shared/constants/seoulDistrictBoundaries';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
@@ -21,6 +22,7 @@ const RISK_MARKER_COLOR: Record<RiskLabel, string> = {
   DANGER: '#dc2626',
 };
 const DATA_UNAVAILABLE_COLOR = '#94a3b8';
+const SENSOR_API_ERROR_MESSAGE = '외부 하수관로 센서 API에 연결할 수 없습니다.';
 
 const RISK_LABEL_KO: Record<RiskLabel, string> = {
   SAFE: '안전',
@@ -51,6 +53,14 @@ const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
 const formatNumber = (value: number | undefined, unit: string) => (typeof value === 'number' ? `${value}${unit}` : '-');
 const DISTRICT_BOUNDARY_MAP = new Map(SEOUL_DISTRICT_BOUNDARIES.map((boundary) => [boundary.name, boundary.paths]));
 
+interface Manhole {
+  locationId: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  waterLevel: number;
+}
+
 const formatForecastRainfall = (status?: LiveStatusResponse) => {
   const values = [status?.forecastRainfall1h, status?.forecastRainfall2h, status?.forecastRainfall3h].filter(
     (value): value is number => typeof value === 'number',
@@ -62,6 +72,7 @@ const formatForecastRainfall = (status?: LiveStatusResponse) => {
 interface RegionRiskMapPanelProps {
   className?: string;
   height?: string;
+  mapControls?: ReactNode;
   layerVisibility?: {
     regionalRisk: boolean;
     waterLevel: boolean;
@@ -84,13 +95,42 @@ function useRegionalStatus() {
   });
 }
 
-function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisibility }: RegionRiskMapPanelProps & { isKakaoReady: boolean }) {
+function useManholes(enabled: boolean) {
+  return useQuery({
+    queryKey: ['external-manholes'],
+    queryFn: async () => {
+      const response = await fetch(`${EXTERNAL_SENSOR_API_BASE_URL}/api/manholes`);
+      if (!response.ok) throw new Error(SENSOR_API_ERROR_MESSAGE);
+      const data = (await response.json()) as Manhole[];
+
+      return data.filter((manhole) => (
+        typeof manhole.latitude === 'number'
+        && typeof manhole.longitude === 'number'
+        && manhole.latitude !== 0
+        && manhole.longitude !== 0
+      ));
+    },
+    enabled,
+    staleTime: 30_000,
+    refetchInterval: enabled ? 60_000 : false,
+  });
+}
+
+const getManholeColor = (waterLevel: number) => {
+  if (waterLevel >= 90) return '#dc2626';
+  if (waterLevel >= 60) return '#f97316';
+  if (waterLevel >= 30) return '#eab308';
+  return '#16a34a';
+};
+
+function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisibility, mapControls }: RegionRiskMapPanelProps & { isKakaoReady: boolean }) {
   const navigate = useNavigate();
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
   const [activeInfoRegion, setActiveInfoRegion] = useState<string | null>(null);
   const { data: regionalStatus, isFetching, isError } = useRegionalStatus();
   const layers = { ...defaultLayerVisibility, ...layerVisibility };
+  const { data: manholes = [], isError: isManholeError } = useManholes(layers.waterLevel);
 
   const regionItems = useMemo(
     () =>
@@ -188,6 +228,46 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
             </CustomOverlayMap>
           </Fragment>
         )) : null}
+        {layers.waterLevel ? manholes
+          .filter((manhole) => manhole.waterLevel >= 30)
+          .map((manhole) => {
+            const markerColor = getManholeColor(manhole.waterLevel);
+
+            return (
+              <Circle
+                key={`manhole-zone-${manhole.locationId}`}
+                center={{ lat: manhole.latitude, lng: manhole.longitude }}
+                radius={360}
+                strokeWeight={1}
+                strokeColor={markerColor}
+                strokeOpacity={0.25}
+                fillColor={markerColor}
+                fillOpacity={0.15}
+                zIndex={1}
+              />
+            );
+          }) : null}
+        {layers.waterLevel ? manholes.map((manhole) => {
+          const markerColor = getManholeColor(manhole.waterLevel);
+
+          return (
+            <CustomOverlayMap
+              key={`manhole-marker-${manhole.locationId}`}
+              position={{ lat: manhole.latitude, lng: manhole.longitude }}
+              clickable
+              yAnchor={0.5}
+              zIndex={6}
+            >
+              <span
+                className="manhole-map-marker"
+                style={{ '--manhole-color': markerColor } as CSSProperties}
+                title={`${manhole.name} / 현재 수위: ${manhole.waterLevel}cm`}
+              >
+                <span className="sr-only">{manhole.name}</span>
+              </span>
+            </CustomOverlayMap>
+          );
+        }) : null}
       </KakaoMap>
 
       {activeItem && layers.regionalRisk ? (
@@ -233,16 +313,19 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
         </div>
       ) : null}
 
+      {mapControls ? <div className="dashboard-map-layer-toggle">{mapControls}</div> : null}
+
       <div className="map-legend region-risk-legend">
         <strong>위험도</strong>
         <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.SAFE }} />안전</span>
         <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.CAUTION }} />관심</span>
         <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.WARNING }} />주의</span>
         <span className="legend-item"><span className="legend-dot" style={{ background: RISK_MARKER_COLOR.DANGER }} />위험</span>
+        {layers.waterLevel ? <span className="legend-item"><span className="legend-dot manhole-legend-dot" />맨홀 {manholes.length}개</span> : null}
       </div>
-      {!layers.regionalRisk ? <div className="region-map-layer-notice">지역별 위험도 레이어가 꺼져 있습니다.</div> : null}
       {isFetching ? <div className="region-map-error">데이터 갱신 중</div> : null}
       {isError ? <div className="region-map-error">지역별 위험도 데이터를 불러오지 못했습니다.</div> : null}
+      {isManholeError ? <div className="region-map-error manhole-map-error">{SENSOR_API_ERROR_MESSAGE}</div> : null}
     </section>
   );
 }
@@ -291,6 +374,7 @@ function RegionRiskMapLoaderContent(props: RegionRiskMapPanelProps & { kakaoMapK
   const [kakaoLoading, kakaoError] = useKakaoLoader({
     appkey: props.kakaoMapKey,
     libraries: ['services', 'clusterer'],
+    url: 'https://dapi.kakao.com/v2/maps/sdk.js',
   });
 
   if (kakaoError) {
@@ -318,9 +402,5 @@ function RegionRiskMapWithLoader(props: RegionRiskMapPanelProps) {
 }
 
 export function RegionRiskMapPanel(props: RegionRiskMapPanelProps) {
-  if (typeof window !== 'undefined' && window.kakao?.maps) {
-    return <RegionRiskMapContent {...props} isKakaoReady />;
-  }
-
   return <RegionRiskMapWithLoader {...props} />;
 }

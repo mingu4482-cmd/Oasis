@@ -1,5 +1,5 @@
-import { AlertTriangle, Clock, Database, Droplets, MapPin } from 'lucide-react';
-import { useMemo } from 'react';
+import { Activity, AlertTriangle, Clock, Database, Droplets, MapPin, Waves } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { IncidentTimeline } from '../../features/alert-system/IncidentTimeline';
@@ -12,6 +12,13 @@ type RankedRegion = LiveStatusResponse & {
   regionName: string;
   riskScore: number;
 };
+
+type DashboardLayerId = 'regionalRisk' | 'waterLevel';
+
+const DASHBOARD_MAP_LAYERS = [
+  { id: 'regionalRisk', label: '위험도', icon: Activity },
+  { id: 'waterLevel', label: '맨홀 위치', icon: Waves },
+] as const;
 
 const formatTimestamp = (timestamp?: string | null) => {
   if (!timestamp) return '-';
@@ -41,6 +48,10 @@ export function DashboardPage() {
   const incidents = useDashboardStore((state) => state.activeIncidents);
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
+  const [mapLayers, setMapLayers] = useState<Record<DashboardLayerId, boolean>>({
+    regionalRisk: true,
+    waterLevel: false,
+  });
   const regionalStatusQuery = useQuery({
     queryKey: ['regional-status'],
     queryFn: fetchRegionalStatus,
@@ -62,90 +73,117 @@ export function DashboardPage() {
   const dataStatus = hasRegionalData ? '수집 중' : '데이터 수집 중';
   const lastUpdated = highestRiskRegion?.timestamp ?? regionalStatus?.timestamp;
 
-  return (
-    <>
-      <div className="dashboard-layout">
-        <section className="overview-strip">
-          <MetricTile label="현재 선택 지역" value={selectedRegion} icon={<MapPin size={18} />} />
-          <MetricTile label="활성 경보 수" value={`${incidents.length}건`} tone="danger" icon={<AlertTriangle size={18} />} />
-          <MetricTile label="데이터 수집 상태" value={dataStatus} icon={<Database size={18} />} />
-          <MetricTile label="마지막 업데이트" value={formatTimestamp(lastUpdated)} icon={<Clock size={18} />} />
-        </section>
+  const toggleMapLayer = (layerId: DashboardLayerId) => {
+    setMapLayers((current) => ({
+      ...current,
+      [layerId]: !current[layerId],
+    }));
+  };
 
-        <div className="main-grid">
-          <div className="map-column">
-            <KakaoMapPanel />
-            <IncidentTimeline />
-          </div>
-          <aside className="right-rail">
-            <section className="panel">
-              <div className="panel-heading">
-                <div>
-                  <span className="eyebrow">AI 분석 요약</span>
-                  <h2>{headlineTitle}</h2>
-                </div>
-                <Droplets size={20} />
+  return (
+    <div className="dashboard-layout">
+      <section className="overview-strip">
+        <MetricTile label="현재 선택 지역" value={selectedRegion} icon={<MapPin size={18} />} />
+        <MetricTile label="활성 경보" value={`${incidents.length}건`} tone="danger" icon={<AlertTriangle size={18} />} />
+        <MetricTile label="데이터 수집 상태" value={dataStatus} icon={<Database size={18} />} />
+        <MetricTile label="마지막 업데이트" value={formatTimestamp(lastUpdated)} icon={<Clock size={18} />} />
+      </section>
+
+      <div className="main-grid">
+        <div className="map-column">
+          <KakaoMapPanel
+            layerVisibility={{ ...mapLayers, rainfall: true }}
+            mapControls={DASHBOARD_MAP_LAYERS.map((layer) => {
+              const Icon = layer.icon;
+              const isActive = mapLayers[layer.id];
+
+              return (
+                <label
+                  key={layer.id}
+                  className={isActive ? 'dashboard-map-layer-chip active' : 'dashboard-map-layer-chip'}
+                  title={`${layer.label} ${isActive ? '끄기' : '켜기'}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={() => toggleMapLayer(layer.id)}
+                  />
+                  <Icon size={16} />
+                  <span>{layer.label}</span>
+                </label>
+              );
+            })}
+          />
+          <IncidentTimeline />
+        </div>
+        <aside className="right-rail">
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">AI 분석 요약</span>
+                <h2>{headlineTitle}</h2>
               </div>
-              {highestRiskRegion ? (
-                <div className="summary-stack">
-                  <div className="summary-row">
-                    <span>지역</span>
-                    <strong>{highestRiskRegion.regionName}</strong>
-                  </div>
-                  <div className="summary-row">
-                    <span>위험 등급</span>
-                    <strong>{highestRiskRegion.riskLabel ?? 'SAFE'}</strong>
-                  </div>
-                  <div className="summary-row">
-                    <span>위험도</span>
-                    <strong>{highestRiskRegion.riskScore}%</strong>
-                  </div>
+              <Droplets size={20} />
+            </div>
+            {highestRiskRegion ? (
+              <div className="summary-stack">
+                <div className="summary-row">
+                  <span>지역</span>
+                  <strong>{highestRiskRegion.regionName}</strong>
                 </div>
+                <div className="summary-row">
+                  <span>위험 등급</span>
+                  <strong>{highestRiskRegion.riskLabel ?? 'SAFE'}</strong>
+                </div>
+                <div className="summary-row">
+                  <span>위험도</span>
+                  <strong>{highestRiskRegion.riskScore}%</strong>
+                </div>
+              </div>
+            ) : (
+              <div className="summary-row">
+                <span>상태</span>
+                <strong>데이터 수집 중</strong>
+              </div>
+            )}
+            {allStable ? <p className="model-label">전체 지역이 안정 상태입니다.</p> : null}
+            <Link className="command-link dashboard-detail-link" to={`/risk-analysis?region=${encodeURIComponent(selectedRegion)}`}>
+              자세히 보기
+            </Link>
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">우선 확인 대상</span>
+                <h2>주요 위험 지역 TOP 3</h2>
+              </div>
+            </div>
+            <div className="top-risk-list">
+              {top3Regions.length > 0 ? (
+                top3Regions.map((item) => (
+                  <button
+                    type="button"
+                    className="summary-row top-risk-button"
+                    key={item.regionName}
+                    onClick={() => setSelectedRegion(item.regionName)}
+                  >
+                    <span>{item.regionName}</span>
+                    <strong>
+                      {item.riskLabel ?? 'SAFE'} · {item.riskScore}%
+                    </strong>
+                  </button>
+                ))
               ) : (
                 <div className="summary-row">
                   <span>상태</span>
                   <strong>데이터 수집 중</strong>
                 </div>
               )}
-              {allStable ? <p className="model-label">전체 지역 안정 상태입니다.</p> : null}
-              <Link className="command-link dashboard-detail-link" to={`/risk-analysis?region=${encodeURIComponent(selectedRegion)}`}>
-                자세히 보기
-              </Link>
-            </section>
-
-            <section className="panel">
-              <div className="panel-heading">
-                <div>
-                  <span className="eyebrow">우선 확인 대상</span>
-                  <h2>주요 위험 지역 TOP 3</h2>
-                </div>
-              </div>
-              <div className="top-risk-list">
-                {top3Regions.length > 0 ? (
-                  top3Regions.map((item) => (
-                    <button
-                      type="button"
-                      className="summary-row top-risk-button"
-                      key={item.regionName}
-                      onClick={() => setSelectedRegion(item.regionName)}
-                    >
-                      <span>{item.regionName}</span>
-                      <strong>
-                        {item.riskLabel ?? 'SAFE'} · {item.riskScore}%
-                      </strong>
-                    </button>
-                  ))
-                ) : (
-                  <div className="summary-row">
-                    <span>상태</span>
-                    <strong>데이터 수집 중</strong>
-                  </div>
-                )}
-              </div>
-            </section>
-          </aside>
-        </div>
+            </div>
+          </section>
+        </aside>
       </div>
-    </>
+    </div>
   );
 }
