@@ -123,11 +123,19 @@ const getManholeColor = (waterLevel: number) => {
   return '#16a34a';
 };
 
+const getManholeLevelLabel = (waterLevel: number) => {
+  if (waterLevel >= 90) return '심각';
+  if (waterLevel >= 60) return '경계';
+  if (waterLevel >= 30) return '주의';
+  return '정상';
+};
+
 function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisibility, mapControls }: RegionRiskMapPanelProps & { isKakaoReady: boolean }) {
   const navigate = useNavigate();
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
   const [activeInfoRegion, setActiveInfoRegion] = useState<string | null>(null);
+  const [selectedManholeId, setSelectedManholeId] = useState<number | null>(null);
   const { data: regionalStatus, isFetching, isError } = useRegionalStatus();
   const layers = { ...defaultLayerVisibility, ...layerVisibility };
   const { data: manholes = [], isError: isManholeError } = useManholes(layers.waterLevel);
@@ -153,6 +161,9 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
   const center = findRegionCoordinate(selectedRegion);
   const activeItemName = activeInfoRegion ?? selectedRegion;
   const activeItem = regionItems.find((item) => item.name === activeItemName) ?? null;
+  const selectedManhole = layers.waterLevel
+    ? manholes.find((manhole) => manhole.locationId === selectedManholeId) ?? null
+    : null;
 
   const selectRegion = (regionName: string) => {
     setSelectedRegion(regionName);
@@ -258,13 +269,15 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
               yAnchor={0.5}
               zIndex={6}
             >
-              <span
+              <button
+                type="button"
                 className="manhole-map-marker"
                 style={{ '--manhole-color': markerColor } as CSSProperties}
                 title={`${manhole.name} / 현재 수위: ${manhole.waterLevel}cm`}
+                onClick={() => setSelectedManholeId((current) => (current === manhole.locationId ? null : manhole.locationId))}
               >
                 <span className="sr-only">{manhole.name}</span>
-              </span>
+              </button>
             </CustomOverlayMap>
           );
         }) : null}
@@ -308,6 +321,32 @@ function RegionRiskMapContent({ className = '', height, isKakaoReady, layerVisib
             </button>
             <button type="button" className="region-info-action secondary" onClick={() => openSafeRoute(activeItem.name)}>
               주변 대피소/안전 경로 보기
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedManhole ? (
+        <div className="region-info-window manhole-info-floating">
+          <div className="region-info-heading">
+            <strong>{selectedManhole.name}</strong>
+            <span style={{ background: getManholeColor(selectedManhole.waterLevel) }}>
+              {getManholeLevelLabel(selectedManhole.waterLevel)}
+            </span>
+          </div>
+          <div className="region-info-grid">
+            <span>현재 수위</span>
+            <strong>{selectedManhole.waterLevel}cm</strong>
+            <span>맨홀 ID</span>
+            <strong>{selectedManhole.locationId}</strong>
+            <span>위도</span>
+            <strong>{selectedManhole.latitude.toFixed(6)}</strong>
+            <span>경도</span>
+            <strong>{selectedManhole.longitude.toFixed(6)}</strong>
+          </div>
+          <div className="region-info-actions">
+            <button type="button" className="region-info-action secondary" onClick={() => setSelectedManholeId(null)}>
+              닫기
             </button>
           </div>
         </div>
