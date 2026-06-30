@@ -7,6 +7,7 @@ import {
   Home,
   LogIn,
   LogOut,
+  Map,
   Menu,
   UserPlus,
   X,
@@ -21,7 +22,7 @@ import { UserRole } from '../types/domain';
 type NavItem = { to: string; label: string; icon: typeof Home; roles: Array<UserRole | 'GUEST'> };
 type NavGroup = { id: string; label: string; icon: typeof Home; items: NavItem[] };
 
-const homeNavItem: NavItem = { to: '/dashboard', label: '홈', icon: Home, roles: ['GUEST', 'USER', 'ADMIN'] };
+const homeNavItem: NavItem = { to: '/map', label: '지도 관제', icon: Map, roles: ['GUEST', 'USER', 'ADMIN'] };
 
 const navGroups: NavGroup[] = [
   {
@@ -29,6 +30,7 @@ const navGroups: NavGroup[] = [
     label: '모니터링',
     icon: Activity,
     items: [
+      { to: '/dashboard', label: '상황판', icon: Home, roles: ['GUEST', 'USER', 'ADMIN'] },
       { to: '/risk-analysis', label: 'AI 위험도 분석', icon: Activity, roles: ['GUEST', 'USER', 'ADMIN'] },
     ],
   },
@@ -82,6 +84,14 @@ export function AppShell({ children }: PropsWithChildren) {
       navigate('/dashboard', { replace: true });
     }
   };
+
+  if (location.pathname === '/map') {
+    return (
+      <div className="app-shell map-shell">
+        <main className="content map-shell-content">{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">

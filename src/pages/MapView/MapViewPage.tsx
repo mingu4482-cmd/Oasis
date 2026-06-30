@@ -1,67 +1,73 @@
-import { Activity, AlertTriangle, CloudRain, MapPin, Waves } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
-import { Map, Circle } from 'react-kakao-maps-sdk'; // 🌟 카카오맵 SDK 추가
-import { EXTERNAL_SENSOR_API_BASE_URL } from '../../shared/api/externalApi';
+import { Activity, AlertTriangle, BarChart3, Bell, CheckSquare, ChevronLeft, ChevronRight, CloudRain, Droplets, FileText, Gauge, Layers, MapPin, PlayCircle, Route, Waves } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { KakaoMapPanel } from '../../features/kakao-map/KakaoMapPanel';
+import { fetchRegionalStatus } from '../../shared/api/aiApi';
 import { REGION_COORDINATES } from '../../shared/constants/regionCoordinates';
 import { useDashboardStore } from '../../shared/store/dashboardStore';
+import { useState } from 'react';
 
 const CONTROL_LAYERS = [
   { id: 'regionalRisk', label: '지역별 위험도', icon: Activity },
   { id: 'waterLevel', label: '하수관로 수위', icon: Waves },
   { id: 'rainfall', label: '강우량 관측', icon: CloudRain },
+  { id: 'safeRoute', label: '대피 경로', icon: Route },
+] as const;
+
+const MAP_NAV_LINKS = [
+  { to: '/dashboard', label: '상황판', icon: Gauge },
+  { to: '/risk-analysis', label: 'AI 분석', icon: Activity },
+  { to: '/simulation', label: '시뮬레이션', icon: PlayCircle },
+  { to: '/alerts', label: '경보', icon: AlertTriangle },
+  { to: '/reports', label: '보고서', icon: FileText },
 ] as const;
 
 type LayerId = (typeof CONTROL_LAYERS)[number]['id'];
 type LayerVisibility = Record<LayerId, boolean>;
 
-// 🌟 백엔드 데이터용 인터페이스
-interface Manhole {
-    locationId: number;
-    name: string;
-    latitude: number;
-    longitude: number;
-    waterLevel: number;
-}
+const RISK_STATUS_ROWS = [
+  { id: 'weather', label: '기상청', valueKey: 'rainfall', unit: 'mm', icon: CloudRain },
+  { id: 'drainage', label: '하수관로', valueKey: 'waterLevel', unit: '%', icon: Waves },
+  { id: 'forecast', label: '예측 강수', valueKey: 'forecastRainfall1h', unit: 'mm', icon: Droplets },
+  { id: 'warning', label: '현재 위기경보 단계', valueKey: 'riskScore', unit: '%', icon: Bell },
+] as const;
 
-const SENSOR_API_ERROR_MESSAGE = '외부 하수관로 센서 API에 연결할 수 없습니다. 현재는 서울시 공공 API 기반 위험도만 표시됩니다.';
+const getSeverityLabel = (score = 0) => {
+  if (score >= 80) return '심각';
+  if (score >= 60) return '경계';
+  if (score >= 40) return '주의';
+  return '관심';
+};
 
-export const MapViewPage = () => {
+const getSeverityClassName = (score = 0) => {
+  if (score >= 80) return 'danger';
+  if (score >= 60) return 'warning';
+  if (score >= 40) return 'watch';
+  return 'normal';
+};
+
+const formatMetric = (value: number | undefined, unit: string) => (typeof value === 'number' ? `${value}${unit}` : '-');
+
+export function MapViewPage() {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
+  const incidents = useDashboardStore((state) => state.activeIncidents);
+  const regionalStatusQuery = useQuery({
+    queryKey: ['regional-status'],
+    queryFn: fetchRegionalStatus,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+  const selectedStatus = regionalStatusQuery.data?.regionStatusMap?.[selectedRegion];
+  const riskScore = selectedStatus?.riskScore ?? 0;
+  const [isSidePanelCollapsed, setIsSidePanelCollapsed] = useState(false);
+  const [isNavCollapsed, setIsNavCollapsed] = useState(false);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
     regionalRisk: true,
     waterLevel: true,
     rainfall: true,
+    safeRoute: false,
   });
-
-  // 🌟 동생이 만든 실시간 벡엔드 연동 로직
-  const [manholes, setManholes] = useState<Manhole[]>([]);
-  const [sensorApiError, setSensorApiError] = useState('');
-  useEffect(() => {
-      const fetchData = async () => {
-          try {
-              const response = await fetch(`${EXTERNAL_SENSOR_API_BASE_URL}/api/manholes`);
-              if (!response.ok) throw new Error('API 서버 연결 안 됨');
-              const data: Manhole[] = await response.json();
-              const validData = data.filter(m => m.latitude !== 0 && m.latitude !== null);
-              setManholes(validData);
-              setSensorApiError('');
-          } catch (e) {
-              console.error("🚨 백엔드 연결 실패!", e);
-              setManholes([]);
-              setSensorApiError(SENSOR_API_ERROR_MESSAGE);
-          }
-      };
-      fetchData();
-      const interval = setInterval(fetchData, 60000);
-      return () => clearInterval(interval);
-  }, []);
-
-  const getHeatmapColor = (waterLevel: number) => {
-      if (waterLevel >= 90) return '#ef4444';
-      if (waterLevel >= 60) return '#f59e0b';
-      return '#10b981';
-  };
 
   const toggleLayer = (layerId: LayerId) => {
     setLayerVisibility((current) => ({
@@ -71,105 +77,200 @@ export const MapViewPage = () => {
   };
 
   return (
-    // 🌟 중복되던 AppShell 제거 (Router에서 관리함)
-    <>
-      <div className="page-layout map-view-page">
-        <section className="panel page-hero-panel map-view-hero">
-          <div>
-            <span className="eyebrow">지역별 위험도 지도</span>
-            <h1>지도 기반 침수 위험도 모니터링</h1>
-            <p>서울 주요 지역의 실시간 침수 위험도를 지도에서 확인하고, 지역을 선택해 AI 상세 분석으로 이동할 수 있습니다.</p>
+    <div className="map-view-page">
+      <KakaoMapPanel
+        className="map-view-fullscreen-map"
+        height="calc(100vh - 60px)"
+        layerVisibility={layerVisibility}
+      />
+
+      <nav className={isNavCollapsed ? 'map-view-app-nav collapsed' : 'map-view-app-nav'} aria-label="페이지 이동">
+        <div className="map-view-app-brand">
+          <strong>OASIS</strong>
+          <span>지도 관제</span>
+        </div>
+        <div className="map-view-nav-links">
+          {MAP_NAV_LINKS.map((item) => {
+            const Icon = item.icon;
+            const target = item.to === '/risk-analysis' ? `${item.to}?region=${encodeURIComponent(selectedRegion)}` : item.to;
+
+            return (
+              <Link key={item.to} to={target} title={item.label}>
+                <Icon size={16} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          className="map-view-nav-toggle"
+          aria-label={isNavCollapsed ? '페이지 메뉴 펼치기' : '페이지 메뉴 접기'}
+          aria-expanded={!isNavCollapsed}
+          onClick={() => setIsNavCollapsed((current) => !current)}
+        >
+          {isNavCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+        </button>
+      </nav>
+
+      <aside className={isSidePanelCollapsed ? 'map-view-side-panel collapsed' : 'map-view-side-panel'} aria-label="종합 상황 목록">
+        <button
+          type="button"
+          className="map-view-panel-toggle"
+          aria-label={isSidePanelCollapsed ? '상황 패널 펼치기' : '상황 패널 접기'}
+          aria-expanded={!isSidePanelCollapsed}
+          onClick={() => setIsSidePanelCollapsed((current) => !current)}
+        >
+          {isSidePanelCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+        </button>
+
+        <div className="map-view-side-heading">
+          <span>종합 상황 모니터링</span>
+          <strong>{selectedRegion}</strong>
+        </div>
+
+        <section className="map-view-side-section">
+          <div className="map-view-section-title">
+            <Activity size={16} />
+            <strong>위험도 현황</strong>
           </div>
-          <div className="map-view-selected-region">
-            <MapPin size={18} />
-            <strong>{selectedRegion}</strong>
+          <div className="map-view-risk-score">
+            <span>현재 위험도</span>
+            <strong>{riskScore}%</strong>
+            <em className={`map-view-severity ${getSeverityClassName(riskScore)}`}>{getSeverityLabel(riskScore)}</em>
+          </div>
+          <div className="map-view-status-list">
+            {RISK_STATUS_ROWS.map((row) => {
+              const Icon = row.icon;
+              const value = selectedStatus?.[row.valueKey];
+              const score = typeof value === 'number' ? value : riskScore;
+
+              return (
+                <div className="map-view-status-row" key={row.id}>
+                  <span>
+                    <Icon size={15} />
+                    {row.label}
+                  </span>
+                  <strong>{formatMetric(value, row.unit)}</strong>
+                  <em className={`map-view-severity ${getSeverityClassName(score)}`}>{getSeverityLabel(score)}</em>
+                </div>
+              );
+            })}
+          </div>
+          <Link className="map-view-decision-link" to={`/risk-analysis?region=${encodeURIComponent(selectedRegion)}`}>
+            <CheckSquare size={15} />
+            의사결정 바로가기
+          </Link>
+        </section>
+
+        <section className="map-view-side-section">
+          <div className="map-view-section-title">
+            <CloudRain size={16} />
+            <strong>단기예보</strong>
+          </div>
+          <div className="map-view-forecast-box">
+            <div><span>예보 시간</span><strong>{selectedStatus?.timestamp ? new Date(selectedStatus.timestamp).toLocaleString('ko-KR') : '-'}</strong></div>
+            <div><span>강수량</span><strong>{formatMetric(selectedStatus?.rainfall, 'mm')}</strong></div>
+            <div><span>1시간 예측</span><strong>{formatMetric(selectedStatus?.forecastRainfall1h, 'mm')}</strong></div>
+            <div><span>관측소</span><strong>{selectedStatus?.rainfallStation ?? '-'}</strong></div>
           </div>
         </section>
 
-        <div className="control-map-layout">
-          <aside className="control-layer-panel" aria-label="지도 레이어 제어">
-            <div className="control-panel-heading">
-              <span className="eyebrow">통합 관제 레이어</span>
-              <h2>지도 표시 항목</h2>
-            </div>
-
-            <label className="control-region-select">
-              분석 지역
-              <select value={selectedRegion} onChange={(event) => setSelectedRegion(event.target.value)}>
-                {REGION_COORDINATES.map((region) => (
-                  <option key={region.name} value={region.name}>
-                    {region.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="control-layer-list">
-              {CONTROL_LAYERS.map((layer) => {
-                const Icon = layer.icon;
-                return (
-                  <button
-                    type="button"
-                    key={layer.label}
-                    className={layerVisibility[layer.id] ? 'control-layer-row active' : 'control-layer-row'}
-                    aria-pressed={layerVisibility[layer.id]}
-                    onClick={() => toggleLayer(layer.id)}
-                  >
-                    <span className="control-layer-icon">
-                      <Icon size={17} />
-                    </span>
-                    <span>{layer.label}</span>
-                    <strong>{layerVisibility[layer.id] ? 'ON' : 'OFF'}</strong>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="control-panel-note">
-              <AlertTriangle size={16} />
-              <span>서울시 강우량, 서울시 하수관로, 기상청 단기예보 데이터를 기반으로 표시됩니다.</span>
-            </div>
-            <div className="control-panel-note map-coordinate-note">
-              <MapPin size={16} />
-              <span>※ 지도 마커는 자치구별 위험도를 표시하기 위한 대표 위치 기준이며, 실제 침수 발생 지점을 의미하지 않습니다.</span>
-            </div>
-            {sensorApiError ? (
-              <div className="control-panel-note map-coordinate-note">
-                <AlertTriangle size={16} />
-                <span>{sensorApiError}</span>
-              </div>
-            ) : null}
-          </aside>
-
-          {/* 🌟 동생의 실시간 카카오 히트맵을 팀원 UI 공간에 렌더링! */}
-          <div className="full-region-risk-map control-map-surface" style={{ width: '100%', height: 'calc(100vh - 238px)', borderRadius: '12px', overflow: 'hidden' }}>
-              <Map center={{ lat: 37.5665, lng: 126.9780 }} style={{ width: "100%", height: "100%" }} level={8}>
-                  {/* 좌측 패널의 '하수관로 수위' 버튼이 켜져있을 때만 히트맵 표시 연동! */}
-                  {layerVisibility.waterLevel && manholes
-                      .filter((m) => m.waterLevel >= 30)
-                      .map((m) => {
-                          const zoneColor = getHeatmapColor(m.waterLevel);
-                          return (
-                              <Circle
-                                  key={`zone-${m.locationId}`}
-                                  center={{ lat: m.latitude, lng: m.longitude }}
-                                  radius={400}
-                                  strokeWeight={1}
-                                  strokeColor={zoneColor}
-                                  strokeOpacity={0.2}
-                                  fillColor={zoneColor}
-                                  fillOpacity={0.15}
-                              />
-                          );
-                      })}
-              </Map>
-              {sensorApiError ? <div className="region-map-error">{sensorApiError}</div> : null}
+        <section className="map-view-side-section">
+          <div className="map-view-section-title">
+            <AlertTriangle size={16} />
+            <strong>주요 경보</strong>
           </div>
+          <div className="map-view-incident-list">
+            {incidents.map((incident) => (
+              <div className="map-view-incident-row" key={incident.id}>
+                <span>{incident.district}</span>
+                <strong>{incident.summary}</strong>
+                <em>{incident.reportedAt}</em>
+              </div>
+            ))}
+          </div>
+        </section>
 
+        <section className="map-view-side-section">
+          <div className="map-view-section-title">
+            <Layers size={16} />
+            <strong>표시 레이어</strong>
+          </div>
+          <div className="map-view-layer-list">
+            {CONTROL_LAYERS.map((layer) => {
+              const Icon = layer.icon;
+              return (
+                <button
+                  type="button"
+                  key={`panel-${layer.id}`}
+                  className={layerVisibility[layer.id] ? 'map-view-layer-row active' : 'map-view-layer-row'}
+                  onClick={() => toggleLayer(layer.id)}
+                >
+                  <Icon size={15} />
+                  <span>{layer.label}</span>
+                  <strong>{layerVisibility[layer.id] ? 'ON' : 'OFF'}</strong>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      </aside>
+
+      <div className="map-view-floating-topbar" aria-label="지도 도구">
+        <div className="map-view-title-chip">
+          <MapPin size={17} />
+          <strong>{selectedRegion}</strong>
+        </div>
+
+        <label className="map-view-region-select">
+          <span>지역</span>
+          <select value={selectedRegion} onChange={(event) => setSelectedRegion(event.target.value)}>
+            {REGION_COORDINATES.map((region) => (
+              <option key={region.name} value={region.name}>
+                {region.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="map-view-layer-toolbar" aria-label="레이어 표시 항목">
+          {CONTROL_LAYERS.map((layer) => {
+            const Icon = layer.icon;
+            return (
+              <button
+                type="button"
+                key={layer.id}
+                className={layerVisibility[layer.id] ? 'map-view-tool-button active' : 'map-view-tool-button'}
+                aria-pressed={layerVisibility[layer.id]}
+                title={layer.label}
+                onClick={() => toggleLayer(layer.id)}
+              >
+                <Icon size={17} />
+                <span>{layer.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
-    </>
+
+      <div className="map-view-floating-actions" aria-label="지도 바로가기">
+        <Link to={`/risk-analysis?region=${encodeURIComponent(selectedRegion)}`} title="실시간 예측 정보">
+          <BarChart3 size={18} />
+          <span>예측</span>
+        </Link>
+        <Link to="/simulation" title="침수 시나리오">
+          <PlayCircle size={18} />
+          <span>시나리오</span>
+        </Link>
+        <Link to="/alerts" title="운영 지원">
+          <AlertTriangle size={18} />
+          <span>운영</span>
+        </Link>
+      </div>
+
+    </div>
   );
-};
+}
 
 export default MapViewPage;
