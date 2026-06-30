@@ -6,6 +6,7 @@ import { RiskAnalysisPage } from '../pages/RiskAnalysis/RiskAnalysisPage';
 import { SimulationPage } from '../pages/Simulation/SimulationPage';
 import { SignupPage } from '../pages/Signup/SignupPage';
 import { LoginPage } from '../pages/Login/LoginPage';
+import { MapViewPage } from '../pages/MapView/MapViewPage';
 import { RoleGuard } from '../shared/components/RoleGuard';
 import { AppShell } from '../shared/components/AppShell';
 
@@ -19,10 +20,10 @@ export const routes: RouteObject[] = [
       </AppShell>
     ),
     children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
+      { index: true, element: <Navigate to="/map" replace /> },
       // 🌟 팀원이 추가한 RoleGuard 와 동생이 추가한 SimulationPage 모두 병합!
       { path: 'dashboard', element: <RoleGuard><DashboardPage /></RoleGuard> },
-      { path: 'map', element: <Navigate to="/dashboard" replace /> },
+      { path: 'map', element: <RoleGuard><MapViewPage /></RoleGuard> },
       { path: 'digital-twin', element: <Navigate to="/dashboard" replace /> },
       { path: 'risk-analysis', element: <RoleGuard><RiskAnalysisPage /></RoleGuard> },
       { path: 'alerts', element: <RoleGuard><AlertCenterPage /></RoleGuard> },

@@ -34,6 +34,7 @@ export function ShelterMapPanel() {
   const [kakaoLoading, error] = useKakaoLoader({
     appkey: kakaoMapKey,
     libraries: ['services', 'clusterer'],
+    url: 'https://dapi.kakao.com/v2/maps/sdk.js',
   });
 
   const mapRef = useRef<HTMLDivElement>(null);

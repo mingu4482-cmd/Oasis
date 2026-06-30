@@ -66,6 +66,8 @@ const formatForecastRainfall = (status?: LiveStatusResponse) => {
 interface RegionRiskMapPanelProps {
   className?: string;
   height?: string;
+  fallbackDescription?: string;
+  fallbackTitle?: string;
   mapControls?: ReactNode;
   layerVisibility?: {
     regionalRisk: boolean;
@@ -136,6 +138,45 @@ const RADIUS_OPTIONS = [0.5, 1, 2] as const;
 const RADIUS_LABEL: Record<number, string> = { 0.5: '500m', 1: '1km', 2: '2km' };
 const MAP_DISPLAY_RADIUS_KM = 10;
 const SELECTED_REGION_LAYER_RADIUS_KM = 4;
+const FALLBACK_MAP_BOUNDS = {
+  minLat: 37.46,
+  maxLat: 37.58,
+  minLng: 126.84,
+  maxLng: 127.1,
+};
+const OSM_FALLBACK_ZOOM = 12;
+
+function latLngToTilePoint(lat: number, lng: number, zoom: number) {
+  const latRad = (lat * Math.PI) / 180;
+  const scale = 2 ** zoom;
+
+  return {
+    x: ((lng + 180) / 360) * scale,
+    y: ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale,
+  };
+}
+
+function buildFallbackTiles(lat: number, lng: number) {
+  const center = latLngToTilePoint(lat, lng, OSM_FALLBACK_ZOOM);
+  const centerX = Math.floor(center.x);
+  const centerY = Math.floor(center.y);
+  const tiles = [];
+
+  for (let y = -4; y <= 4; y += 1) {
+    for (let x = -5; x <= 5; x += 1) {
+      const tileX = centerX + x;
+      const tileY = centerY + y;
+      tiles.push({
+        key: `${OSM_FALLBACK_ZOOM}-${tileX}-${tileY}`,
+        src: `https://tile.openstreetmap.org/${OSM_FALLBACK_ZOOM}/${tileX}/${tileY}.png`,
+        left: `calc(50% + ${(tileX - center.x) * 256}px)`,
+        top: `calc(50% + ${(tileY - center.y) * 256}px)`,
+      });
+    }
+  }
+
+  return tiles;
+}
 
 function calcDistKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 6371;
@@ -520,6 +561,9 @@ function RegionRiskMapFallback(props: RegionRiskMapPanelProps) {
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore((state) => state.setSelectedRegion);
   const { data: regionalStatus } = useRegionalStatus();
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const selectedRegionCenter = findRegionCoordinate(selectedRegion);
+  const fallbackTiles = buildFallbackTiles(selectedRegionCenter.lat, selectedRegionCenter.lng);
 
   const regionItems = REGION_COORDINATES.map((coordinate) => {
     const status = regionalStatus?.regionStatusMap?.[coordinate.name];
@@ -535,8 +579,48 @@ function RegionRiskMapFallback(props: RegionRiskMapPanelProps) {
   return (
     <section className={`map-surface region-risk-map ${props.className ?? ''}`} style={props.height ? { height: props.height } : undefined}>
       <div className="region-map-fallback">
-        <strong>카카오 지도 키가 설정되지 않아 지도 화면을 표시할 수 없습니다.</strong>
-        <span>지역 목록에서 분석 기준 지역을 선택할 수 있습니다.</span>
+        <strong>{props.fallbackTitle ?? '카카오 지도 키가 설정되지 않아 지도 화면을 표시할 수 없습니다.'}</strong>
+        <span>
+          {props.fallbackDescription ?? '지역 목록에서 분석 기준 지역을 선택할 수 있습니다.'}
+          {currentOrigin ? ` 현재 접속 주소: ${currentOrigin}` : ''}
+        </span>
+        {currentOrigin ? (
+          <div className="map-view-sdk-error">
+            <strong>카카오 지도 SDK 차단</strong>
+            <span>OSM 지도 타일로 임시 표시 중 · 카카오 Web 플랫폼 등록 주소: {currentOrigin}</span>
+          </div>
+        ) : null}
+        <div className="region-fallback-map" aria-label="대체 지역 지도">
+          <div className="region-fallback-tile-layer" aria-hidden="true">
+            {fallbackTiles.map((tile) => (
+              <img
+                key={tile.key}
+                alt=""
+                className="region-fallback-tile"
+                draggable={false}
+                src={tile.src}
+                style={{ left: tile.left, top: tile.top }}
+              />
+            ))}
+          </div>
+          {regionItems.map((item) => {
+            const left = ((item.lng - FALLBACK_MAP_BOUNDS.minLng) / (FALLBACK_MAP_BOUNDS.maxLng - FALLBACK_MAP_BOUNDS.minLng)) * 100;
+            const top = ((FALLBACK_MAP_BOUNDS.maxLat - item.lat) / (FALLBACK_MAP_BOUNDS.maxLat - FALLBACK_MAP_BOUNDS.minLat)) * 100;
+
+            return (
+              <button
+                type="button"
+                key={`fallback-map-${item.name}`}
+                className={item.name === selectedRegion ? 'region-fallback-map-marker active' : 'region-fallback-map-marker'}
+                style={{ left: `${left}%`, top: `${top}%`, '--marker-color': item.markerColor } as CSSProperties}
+                onClick={() => setSelectedRegion(item.name)}
+              >
+                <span>{item.name}</span>
+                <strong>{item.status?.riskScore ?? 0}%</strong>
+              </button>
+            );
+          })}
+        </div>
         <div className="region-fallback-list">
           {regionItems.map((item) => (
             <button
@@ -565,12 +649,11 @@ function RegionRiskMapLoaderContent(props: RegionRiskMapPanelProps & { kakaoMapK
 
   if (kakaoError) {
     return (
-      <section className={`map-surface region-risk-map ${props.className ?? ''}`} style={props.height ? { height: props.height } : undefined}>
-        <div className="region-map-fallback">
-          <strong>카카오 지도를 불러오지 못했습니다.</strong>
-          <span>지도 SDK 설정을 확인하세요.</span>
-        </div>
-      </section>
+      <RegionRiskMapFallback
+        {...props}
+        fallbackTitle="카카오 지도 SDK를 불러오지 못했습니다."
+        fallbackDescription="카카오 개발자 콘솔의 JavaScript 키 플랫폼(Web)에 현재 접속 도메인을 등록해야 합니다."
+      />
     );
   }
 
