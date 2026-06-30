@@ -117,7 +117,13 @@ export function DashboardPage() {
                     type="radio"
                     name="dashboard-map-mode"
                     checked={isActive}
-                    onChange={() => setMapMode(mode.id)}
+                    onChange={() => {
+                      setMapMode(mode.id);
+                      // '맨홀 위치' 버튼을 누르면 지역 선택을 초기화해서 전체를 보여줌
+                      if (mode.id === 'waterLevel') {
+                        setSelectedRegion('서울시'); // 💡 주의: 프로젝트에서 '전체'를 의미하는 기본값이 '서울시'인지, '전체'인지 확인하고 그 값을 넣어줘!
+                      }
+                    }}
                   />
                   <Icon size={16} />
                   <span>{mode.label}</span>
