@@ -1,9 +1,9 @@
 spring:
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres
-    username: postgres.crumwuakoqnfjelfvuco
-    password: dhdktltm1234
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     hikari:
       maximum-pool-size: 10
       connection-timeout: 30000
@@ -14,3 +14,9 @@ mybatis:
   mapper-locations: classpath:mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
+
+external:
+  seoul:
+    api-key: ${SEOUL_WATER_API_KEY}
+  kakao:
+    rest-api-key: ${KAKAO_REST_API_KEY}
