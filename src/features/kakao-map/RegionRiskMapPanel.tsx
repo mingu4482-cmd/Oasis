@@ -560,7 +560,6 @@ function RegionRiskMapLoaderContent(props: RegionRiskMapPanelProps & { kakaoMapK
   const [kakaoLoading, kakaoError] = useKakaoLoader({
     appkey: props.kakaoMapKey,
     libraries: ['services', 'clusterer'],
-    url: 'https://dapi.kakao.com/v2/maps/sdk.js',
   });
 
   if (kakaoError) {
