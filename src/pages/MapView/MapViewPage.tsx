@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart3, Bell, CheckSquare, ChevronLeft, ChevronRight, CloudRain, Droplets, FileText, Gauge, Layers, MapPin, PlayCircle, Route, Waves } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, CheckSquare, ChevronLeft, ChevronRight, CloudRain, Droplets, FileText, Gauge, Layers, List, MapPin, PlayCircle, Route, Waves, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { KakaoMapPanel } from '../../features/kakao-map/KakaoMapPanel';
@@ -60,7 +60,7 @@ export function MapViewPage() {
   });
   const selectedStatus = regionalStatusQuery.data?.regionStatusMap?.[selectedRegion];
   const riskScore = selectedStatus?.riskScore ?? 0;
-  const [isSidePanelCollapsed, setIsSidePanelCollapsed] = useState(false);
+  const [isSidePanelVisible, setIsSidePanelVisible] = useState(true);
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
     regionalRisk: true,
@@ -79,7 +79,7 @@ export function MapViewPage() {
   return (
     <div className="map-view-page">
       <KakaoMapPanel
-        className="map-view-fullscreen-map"
+        className={isSidePanelVisible ? 'map-view-fullscreen-map side-panel-visible' : 'map-view-fullscreen-map'}
         height="calc(100vh - 60px)"
         layerVisibility={layerVisibility}
       />
@@ -113,16 +113,17 @@ export function MapViewPage() {
         </button>
       </nav>
 
-      <aside className={isSidePanelCollapsed ? 'map-view-side-panel collapsed' : 'map-view-side-panel'} aria-label="종합 상황 목록">
-        <button
-          type="button"
-          className="map-view-panel-toggle"
-          aria-label={isSidePanelCollapsed ? '상황 패널 펼치기' : '상황 패널 접기'}
-          aria-expanded={!isSidePanelCollapsed}
-          onClick={() => setIsSidePanelCollapsed((current) => !current)}
-        >
-          {isSidePanelCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-        </button>
+      {isSidePanelVisible ? (
+        <aside className="map-view-side-panel" aria-label="종합 상황 목록">
+          <button
+            type="button"
+            className="map-view-side-close"
+            aria-label="상황 목록 닫기"
+            title="상황 목록 닫기"
+            onClick={() => setIsSidePanelVisible(false)}
+          >
+            <X size={17} />
+          </button>
 
         <div className="map-view-side-heading">
           <span>종합 상황 모니터링</span>
@@ -215,7 +216,19 @@ export function MapViewPage() {
             })}
           </div>
         </section>
-      </aside>
+        </aside>
+      ) : (
+        <button
+          type="button"
+          className="map-view-side-open"
+          aria-label="상황 목록 열기"
+          title="상황 목록 열기"
+          onClick={() => setIsSidePanelVisible(true)}
+        >
+          <List size={17} />
+          <span>상황 목록</span>
+        </button>
+      )}
 
       <div className="map-view-floating-topbar" aria-label="지도 도구">
         <div className="map-view-title-chip">
@@ -252,21 +265,6 @@ export function MapViewPage() {
             );
           })}
         </div>
-      </div>
-
-      <div className="map-view-floating-actions" aria-label="지도 바로가기">
-        <Link to={`/risk-analysis?region=${encodeURIComponent(selectedRegion)}`} title="실시간 예측 정보">
-          <BarChart3 size={18} />
-          <span>예측</span>
-        </Link>
-        <Link to="/simulation" title="침수 시나리오">
-          <PlayCircle size={18} />
-          <span>시나리오</span>
-        </Link>
-        <Link to="/alerts" title="운영 지원">
-          <AlertTriangle size={18} />
-          <span>운영</span>
-        </Link>
       </div>
 
     </div>
