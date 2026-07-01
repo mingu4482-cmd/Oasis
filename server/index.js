@@ -128,7 +128,7 @@ function toRiskForecast(payload) {
   };
 }
 
-function fallbackGeneratedAlert(payload) {
+function fallbackGeneratedAlert(payload, source = 'fallback') {
   const rules = {
     SAFE: {
       alertLevel: '정상',
@@ -163,7 +163,7 @@ function fallbackGeneratedAlert(payload) {
   return {
     ...rule,
     createdAt: new Date().toISOString(),
-    source: 'fallback',
+    source,
   };
 }
 
@@ -422,7 +422,7 @@ app.post('/api/generate-alert', async (request, response) => {
     const dataStatus = request.body?.dataStatus;
     const source = String(request.body?.source ?? '').toLowerCase();
     if (riskLabel !== 'WARNING' && riskLabel !== 'DANGER') {
-      response.json(fallbackGeneratedAlert(request.body));
+      response.json(fallbackGeneratedAlert(request.body, 'rule-based'));
       return;
     }
     if (dataStatus !== 'REALTIME' && dataStatus !== 'PARTIAL') {
