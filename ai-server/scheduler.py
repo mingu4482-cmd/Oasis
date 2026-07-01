@@ -49,9 +49,10 @@ KMA_FORECAST_URL = os.getenv(
 SEOUL_RAINFALL_SERVICE = os.getenv("SEOUL_RAINFALL_SERVICE", "ListRainfallService")
 SEOUL_DRAINPIPE_SERVICE = os.getenv("SEOUL_DRAINPIPE_SERVICE", "DrainpipeMonitoringInfo")
 EXPRESS_BASE_URL = os.getenv("EXPRESS_BASE_URL", "http://localhost:4000").rstrip("/")
-COLLECT_INTERVAL_SECONDS = int(os.getenv("COLLECT_INTERVAL_SECONDS", "60"))
+COLLECT_INTERVAL_SECONDS = int(os.getenv("COLLECT_INTERVAL_SECONDS", "600"))
 TARGET_GU_NAME = os.getenv("TARGET_GU_NAME", "강남구")
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
+KMA_RATE_LIMIT_COOLDOWN_SECONDS = int(os.getenv("KMA_RATE_LIMIT_COOLDOWN_SECONDS", "900"))
 DEFAULT_DRAINAGE_LEVEL = float(os.getenv("DEFAULT_DRAINAGE_LEVEL", "75"))
 DANGER_WATER_LEVEL_M = float(os.getenv("DANGER_WATER_LEVEL_M", "1.0"))
 
@@ -97,6 +98,9 @@ DATA_STATUS_LABELS = {
     "FALLBACK": "fallback 데이터가 포함되어 참고용 상태만 제공합니다.",
     "UNAVAILABLE": "핵심 데이터가 부족해 위험도 계산을 보류했습니다.",
 }
+
+KMA_FORECAST_CACHE: dict[tuple[int, int], tuple[str, str, list[float]]] = {}
+KMA_RATE_LIMITED_UNTIL: datetime | None = None
 
 
 def mask_key(value: str) -> str:
@@ -401,10 +405,21 @@ def get_kma_base_time(now: datetime) -> tuple[str, str]:
 
 
 def fetch_kma_forecast_rainfall(nx: int, ny: int) -> list[float]:
+    global KMA_RATE_LIMITED_UNTIL
+
     if not KMA_API_KEY:
         raise RuntimeError("KMA_API_KEY is missing")
 
     base_date, base_time = get_kma_base_time(datetime.now())
+    cached = KMA_FORECAST_CACHE.get((nx, ny))
+    if cached and cached[0] == base_date and cached[1] == base_time:
+        logger.info("%s KMA forecast cache hit. nx=%s ny=%s", LOG_PREFIX, nx, ny)
+        return list(cached[2])
+
+    now = datetime.now()
+    if KMA_RATE_LIMITED_UNTIL and now < KMA_RATE_LIMITED_UNTIL:
+        raise RuntimeError("KMA forecast API rate-limit cooldown is active")
+
     response = requests.get(
         KMA_FORECAST_URL,
         params={
@@ -419,6 +434,9 @@ def fetch_kma_forecast_rainfall(nx: int, ny: int) -> list[float]:
         },
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
+    if response.status_code == 429:
+        KMA_RATE_LIMITED_UNTIL = now + timedelta(seconds=KMA_RATE_LIMIT_COOLDOWN_SECONDS)
+        raise RuntimeError("KMA forecast API rate limit exceeded")
     response.raise_for_status()
 
     payload = response.json()
@@ -437,6 +455,8 @@ def fetch_kma_forecast_rainfall(nx: int, ny: int) -> list[float]:
     while len(values) < 3:
         values.append(0.0)
 
+    KMA_FORECAST_CACHE[(nx, ny)] = (base_date, base_time, list(values))
+    KMA_RATE_LIMITED_UNTIL = None
     logger.info("%s KMA forecast API success. nx=%s ny=%s", LOG_PREFIX, nx, ny)
     return values
 

@@ -10,7 +10,7 @@ export default defineConfig({
       allow: ['..'],
     },
     proxy: {
-      '/api': 'http://127.0.0.1:8080',
+      '/api': 'http://127.0.0.1:4000',
       '/vworld-api': {
         target: 'https://api.vworld.kr',
         changeOrigin: true,
