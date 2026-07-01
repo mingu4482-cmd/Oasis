@@ -676,8 +676,8 @@ function RegionRiskMapContent({
                   key={`shelter-${shelter.id}`}
                   position={{ lat: shelter.lat, lng: shelter.lng }}
                   clickable
-                  yAnchor={1}
-                  zIndex={isSelected ? 9 : 5}
+                  yAnchor={1.35}
+                  zIndex={isSelected ? 10 : 7}
                 >
                   <button
                     type="button"

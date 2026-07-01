@@ -24,6 +24,8 @@ const MAP_NAV_LINKS = [
   { to: '/reports', label: '보고서', icon: FileText },
 ] as const;
 
+const VISIBLE_MAP_NAV_LINKS = MAP_NAV_LINKS.filter((item) => item.to !== '/dashboard');
+
 type LayerId = (typeof CONTROL_LAYERS)[number]['id'];
 type LayerVisibility = Record<LayerId, boolean>;
 
@@ -92,7 +94,7 @@ export function MapViewPage() {
           <span>지도 관제</span>
         </div>
         <div className="map-view-nav-links">
-          {MAP_NAV_LINKS.map((item) => {
+          {VISIBLE_MAP_NAV_LINKS.map((item) => {
             const Icon = item.icon;
             const target = item.to === '/risk-analysis' ? `${item.to}?region=${encodeURIComponent(selectedRegion)}` : item.to;
 

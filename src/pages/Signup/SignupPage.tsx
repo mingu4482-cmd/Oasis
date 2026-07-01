@@ -59,7 +59,7 @@ export function SignupPage() {
     try {
       const user = await signup(form);
       registerUser(user);
-      navigate('/dashboard', { replace: true });
+      navigate('/map', { replace: true });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
@@ -155,7 +155,7 @@ export function SignupPage() {
           </div>
 
           <div className="signup-actions">
-            <button className="command-button secondary" type="button" onClick={() => navigate('/dashboard')}>
+            <button className="command-button secondary" type="button" onClick={() => navigate('/map')}>
               취소
             </button>
             <button className="command-button" type="submit" disabled={isSubmitting}>

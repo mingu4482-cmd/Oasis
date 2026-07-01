@@ -26,5 +26,5 @@ export function canAccessPath(role: UserRole | null, path: string) {
     return true;
   }
 
-  return ['/dashboard', '/map', '/risk-analysis', '/signup', '/login'].some((allowedPath) => path.startsWith(allowedPath));
+  return ['/map', '/risk-analysis', '/signup', '/login'].some((allowedPath) => path.startsWith(allowedPath));
 }

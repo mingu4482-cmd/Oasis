@@ -10,7 +10,7 @@ export function RoleGuard({ children }: RoleGuardProps) {
   const role = useAuthStore((state) => state.currentUser?.role ?? null);
 
   if (!canAccessPath(role, location.pathname)) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/map" replace />;
   }
 
   return children;

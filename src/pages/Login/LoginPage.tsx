@@ -30,7 +30,7 @@ export function LoginPage() {
     try {
       const user = await login({ email, password });
       registerUser(user);
-      navigate('/dashboard', { replace: true });
+      navigate('/map', { replace: true });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
