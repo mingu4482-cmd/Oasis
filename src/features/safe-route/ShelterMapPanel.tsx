@@ -71,15 +71,20 @@ export function ShelterMapPanel() {
     const map = new window.kakao.maps.Map(mapRef.current, {
       center: new window.kakao.maps.LatLng(37.5665, 126.978),
       level: 7,
-      maxLevel: 8,
+      maxLevel: 7,
     });
-    window.kakao.maps.event.addListener(map, 'center_changed', () => {
+    const clampCenter = () => {
       const c = map.getCenter();
       const lat = Math.min(Math.max(c.getLat(), SEOUL_BOUNDS.sw.lat), SEOUL_BOUNDS.ne.lat);
       const lng = Math.min(Math.max(c.getLng(), SEOUL_BOUNDS.sw.lng), SEOUL_BOUNDS.ne.lng);
       if (lat !== c.getLat() || lng !== c.getLng()) {
         map.setCenter(new window.kakao.maps.LatLng(lat, lng));
       }
+    };
+    window.kakao.maps.event.addListener(map, 'center_changed', clampCenter);
+    window.kakao.maps.event.addListener(map, 'zoom_changed', () => {
+      if (map.getLevel() > 7) map.setLevel(7);
+      clampCenter();
     });
     mapInstanceRef.current = map;
     setMapReady(true);

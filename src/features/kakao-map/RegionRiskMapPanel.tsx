@@ -394,10 +394,14 @@ function RegionRiskMapContent({
       <KakaoMap
         center={{ lat: center.lat, lng: center.lng }}
         isPanto
-        level={8}
-        maxLevel={8}
+        level={7}
+        maxLevel={7}
         style={{ width: "100%", height: "100%" }}
         onCenterChanged={clampToSeoul}
+        onZoomChanged={(map) => {
+          if (map.getLevel() > 7) map.setLevel(7);
+          clampToSeoul(map);
+        }}
       >
         {layers.regionalRisk
           ? regionItems.map((item) => (
