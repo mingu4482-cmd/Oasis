@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import socket
 import sys
 import time
 from datetime import datetime, timedelta
@@ -53,7 +54,8 @@ COLLECT_INTERVAL_SECONDS = int(os.getenv("COLLECT_INTERVAL_SECONDS", "600"))
 TARGET_GU_NAME = os.getenv("TARGET_GU_NAME", "강남구")
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
 KMA_RATE_LIMIT_COOLDOWN_SECONDS = int(os.getenv("KMA_RATE_LIMIT_COOLDOWN_SECONDS", "900"))
-DEFAULT_DRAINAGE_LEVEL = float(os.getenv("DEFAULT_DRAINAGE_LEVEL", "75"))
+KMA_REQUEST_INTERVAL_SECONDS = float(os.getenv("KMA_REQUEST_INTERVAL_SECONDS", "1.2"))
+SCHEDULER_LOCK_PORT = int(os.getenv("SCHEDULER_LOCK_PORT", "49171"))
 DANGER_WATER_LEVEL_M = float(os.getenv("DANGER_WATER_LEVEL_M", "1.0"))
 
 REGION_GRID = {
@@ -101,6 +103,22 @@ DATA_STATUS_LABELS = {
 
 KMA_FORECAST_CACHE: dict[tuple[int, int], tuple[str, str, list[float]]] = {}
 KMA_RATE_LIMITED_UNTIL: datetime | None = None
+SCHEDULER_LOCK_SOCKET: socket.socket | None = None
+
+
+def acquire_scheduler_lock() -> bool:
+    global SCHEDULER_LOCK_SOCKET
+
+    lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        lock_socket.bind(("127.0.0.1", SCHEDULER_LOCK_PORT))
+        lock_socket.listen(1)
+    except OSError:
+        lock_socket.close()
+        return False
+
+    SCHEDULER_LOCK_SOCKET = lock_socket
+    return True
 
 
 def mask_key(value: str) -> str:
@@ -467,14 +485,18 @@ def build_forecast_map() -> tuple[dict[str, list[float]], set[str]]:
     forecast_by_region: dict[str, list[float]] = {}
     failed_regions: set[str] = set()
 
+    requested_grid_count = 0
     for region, grid in REGION_GRID.items():
         grid_key = (grid["nx"], grid["ny"])
         if grid_key not in forecast_by_grid and grid_key not in failed_grids:
+            if requested_grid_count > 0:
+                time.sleep(KMA_REQUEST_INTERVAL_SECONDS)
             try:
                 forecast_by_grid[grid_key] = fetch_kma_forecast_rainfall(*grid_key)
             except Exception as error:
                 logger.warning("%s KMA forecast API failed. nx=%s ny=%s error=%s", LOG_PREFIX, *grid_key, error)
                 failed_grids.add(grid_key)
+            requested_grid_count += 1
 
         if grid_key in forecast_by_grid:
             forecast_by_region[region] = forecast_by_grid[grid_key]
@@ -559,16 +581,18 @@ def build_region_status(
     forecast_success = region not in failed_forecast_regions
     forecast_status = "OK" if forecast_success else "FAILED"
     if not forecast_success:
-        warnings.append("선택 지역의 기상청 예보 조회에 실패해 예보 강수량을 0mm로 보정했습니다.")
+        warnings.append("선택 지역의 기상청 예보 조회에 실패해 예보값을 표시하지 않습니다.")
 
     success_count = int(rainfall_success) + int(drainpipe_success) + int(forecast_success)
     source = source_from_success(success_count)
     data_status = data_status_from_success(rainfall_success, drainpipe_success, forecast_success)
+    water_level = drainpipe_meta["waterLevel"]
+    drainage_level = max(0.0, min(100.0, round(100.0 - water_level, 1)))
     payload = build_payload_from_input(
         {
             "rainfall": rainfall,
-            "waterLevel": drainpipe_meta["waterLevel"],
-            "drainageLevel": DEFAULT_DRAINAGE_LEVEL if success_count > 0 else FALLBACK_PAYLOAD["drainageLevel"],
+            "waterLevel": water_level,
+            "drainageLevel": drainage_level,
             "waterLevelRiseRate": drainpipe_meta["waterLevelRiseRate"],
             "forecastRainfall1h": forecast[0],
             "forecastRainfall2h": forecast[1],
@@ -678,6 +702,14 @@ def collect_and_predict() -> None:
 
 
 def start_scheduler() -> None:
+    if not acquire_scheduler_lock():
+        logger.warning(
+            "%s another scheduler is already running. port=%s",
+            LOG_PREFIX,
+            SCHEDULER_LOCK_PORT,
+        )
+        return
+
     log_loaded_keys()
     logger.info("%s started", LOG_PREFIX)
     scheduler = BlockingScheduler(timezone="Asia/Seoul")
