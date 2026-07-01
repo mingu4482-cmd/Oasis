@@ -59,6 +59,20 @@ const DISTRICT_BOUNDARY_MAP = new Map(
   SEOUL_DISTRICT_BOUNDARIES.map((boundary) => [boundary.name, boundary.paths]),
 );
 
+const SEOUL_BOUNDS = {
+  sw: { lat: 37.413294, lng: 126.734086 },
+  ne: { lat: 37.715133, lng: 127.269311 },
+};
+
+function clampToSeoul(map: any) {
+  const c = map.getCenter();
+  const lat = Math.min(Math.max(c.getLat(), SEOUL_BOUNDS.sw.lat), SEOUL_BOUNDS.ne.lat);
+  const lng = Math.min(Math.max(c.getLng(), SEOUL_BOUNDS.sw.lng), SEOUL_BOUNDS.ne.lng);
+  if (lat !== c.getLat() || lng !== c.getLng()) {
+    map.setCenter(new window.kakao.maps.LatLng(lat, lng));
+  }
+}
+
 interface Manhole {
   locationId: number;
   name: string;
@@ -327,7 +341,9 @@ function RegionRiskMapContent({
         center={{ lat: center.lat, lng: center.lng }}
         isPanto
         level={8}
+        maxLevel={8}
         style={{ width: "100%", height: "100%" }}
+        onCenterChanged={clampToSeoul}
       >
         {layers.regionalRisk
           ? regionItems.map((item) => (
