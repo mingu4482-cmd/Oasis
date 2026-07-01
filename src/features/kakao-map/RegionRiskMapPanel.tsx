@@ -126,6 +126,12 @@ const findBoundaryPathsByCenter = (
     isPointInAnyBoundary(center, boundary.paths),
   )?.paths ?? [];
 
+const isWithinSeoulBounds = (latitude: number, longitude: number) =>
+  latitude >= SEOUL_BOUNDS.sw.lat &&
+  latitude <= SEOUL_BOUNDS.ne.lat &&
+  longitude >= SEOUL_BOUNDS.sw.lng &&
+  longitude <= SEOUL_BOUNDS.ne.lng;
+
 interface RegionRiskMapPanelProps {
   className?: string;
   height?: string;
@@ -179,7 +185,8 @@ function useManholes(enabled: boolean) {
           typeof manhole.latitude === "number" &&
           typeof manhole.longitude === "number" &&
           manhole.latitude !== 0 &&
-          manhole.longitude !== 0,
+          manhole.longitude !== 0 &&
+          isWithinSeoulBounds(manhole.latitude, manhole.longitude),
       );
     },
     enabled,
@@ -273,6 +280,9 @@ function RegionRiskMapContent({
   const radiusFilter = useSafeRouteStore((state) => state.radiusFilter);
   const isLocating = useSafeRouteStore((state) => state.isLocating);
   const selectShelter = useSafeRouteStore((state) => state.selectShelter);
+  const clearShelterSelection = useSafeRouteStore(
+    (state) => state.clearSelection,
+  );
   const fetchCurrentLocation = useSafeRouteStore(
     (state) => state.fetchCurrentLocation,
   );
@@ -314,13 +324,30 @@ function RegionRiskMapContent({
 
   const selectedRegionCenter = findRegionCoordinate(selectedRegion);
   const center = selectedRegionCenter;
+  const selectedBoundaryPaths = useMemo(
+    () =>
+      districtBoundaryMap.get(selectedRegion) ??
+      findBoundaryPathsByCenter(districtBoundaries, selectedRegionCenter),
+    [
+      districtBoundaries,
+      districtBoundaryMap,
+      selectedRegion,
+      selectedRegionCenter,
+    ],
+  );
   const visibleManholes = useMemo(() => {
     if (!layers.waterLevel) return [];
-
-    const selectedBoundaryPaths =
-      districtBoundaryMap.get(selectedRegion) ??
-      findBoundaryPathsByCenter(districtBoundaries, selectedRegionCenter);
-    if (!selectedBoundaryPaths?.length) return [];
+    if (!selectedBoundaryPaths?.length) {
+      return manholes.filter(
+        (manhole) =>
+          calcDistKm(
+            selectedRegionCenter.lat,
+            selectedRegionCenter.lng,
+            manhole.latitude,
+            manhole.longitude,
+          ) <= SELECTED_REGION_LAYER_RADIUS_KM,
+      );
+    }
 
     return manholes.filter((manhole) =>
       isPointInAnyBoundary(
@@ -329,28 +356,46 @@ function RegionRiskMapContent({
       ),
     );
   }, [
-    districtBoundaries,
-    districtBoundaryMap,
     layers.waterLevel,
     manholes,
-    selectedRegion,
-    selectedRegionCenter,
+    selectedBoundaryPaths,
+    selectedRegionCenter.lat,
+    selectedRegionCenter.lng,
   ]);
   const selectedManhole = layers.waterLevel
     ? (visibleManholes.find(
         (manhole) => manhole.locationId === selectedManholeId,
       ) ?? null)
     : null;
+  const hasSelectedRegionAddressShelters = useMemo(
+    () => shelters.some((shelter) => shelter.address?.includes(selectedRegion)),
+    [selectedRegion, shelters],
+  );
   const visibleShelters = useMemo(() => {
     if (!layers.safeRoute) return [];
     return shelters.filter((shelter) => {
-      const regionDistance = calcDistKm(
-        selectedRegionCenter.lat,
-        selectedRegionCenter.lng,
-        shelter.lat,
-        shelter.lng,
-      );
-      if (regionDistance > SELECTED_REGION_LAYER_RADIUS_KM) return false;
+      if (selectedBoundaryPaths.length) {
+        if (
+          !isPointInAnyBoundary(
+            { lat: shelter.lat, lng: shelter.lng },
+            selectedBoundaryPaths,
+          )
+        ) {
+          return false;
+        }
+      } else {
+        if (hasSelectedRegionAddressShelters) {
+          if (!shelter.address?.includes(selectedRegion)) return false;
+        } else {
+          const regionDistance = calcDistKm(
+            selectedRegionCenter.lat,
+            selectedRegionCenter.lng,
+            shelter.lat,
+            shelter.lng,
+          );
+          if (regionDistance > SELECTED_REGION_LAYER_RADIUS_KM) return false;
+        }
+      }
       if (shelter.id === selectedShelterId) return true;
       if (!currentLocation) return true;
       const locationDistance = calcDistKm(
@@ -363,13 +408,36 @@ function RegionRiskMapContent({
     });
   }, [
     currentLocation,
+    hasSelectedRegionAddressShelters,
     layers.safeRoute,
     radiusFilter,
+    selectedBoundaryPaths,
+    selectedRegion,
     selectedRegionCenter.lat,
     selectedRegionCenter.lng,
     selectedShelterId,
     shelters,
   ]);
+
+  useEffect(() => {
+    if (
+      selectedManholeId !== null &&
+      !visibleManholes.some(
+        (manhole) => manhole.locationId === selectedManholeId,
+      )
+    ) {
+      setSelectedManholeId(null);
+    }
+  }, [selectedManholeId, visibleManholes]);
+
+  useEffect(() => {
+    if (
+      selectedShelterId &&
+      !visibleShelters.some((shelter) => shelter.id === selectedShelterId)
+    ) {
+      clearShelterSelection();
+    }
+  }, [clearShelterSelection, selectedShelterId, visibleShelters]);
   const inRangeCount =
     layers.safeRoute && radiusFilter && currentLocation
       ? visibleShelters.filter(
@@ -434,11 +502,14 @@ function RegionRiskMapContent({
         center={{ lat: center.lat, lng: center.lng }}
         isPanto
         level={7}
-        maxLevel={7}
+        maxLevel={1}
+        minLevel={7}
+        draggable
+        zoomable
+        scrollwheel
         style={{ width: "100%", height: "100%" }}
         onCenterChanged={clampToSeoul}
         onZoomChanged={(map) => {
-          if (map.getLevel() > 7) map.setLevel(7);
           clampToSeoul(map);
         }}
       >

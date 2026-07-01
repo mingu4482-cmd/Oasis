@@ -9,7 +9,7 @@ OASIS는 공공 API 기반 침수 위험도 수집, AI 예측, 상황별 알림 
 - `.editorconfig`: UTF-8, CRLF 등 편집기 기본 설정
 - `.gitignore`: Git 추적 제외 설정
 - `HELP.md`: Spring Initializr가 생성한 참고 문서
-- `index.html`: Vite SPA 진입 HTML, CRA `%PUBLIC_URL%` 문법 없이 Vite 방식으로 관리
+- `index.html`: Vite SPA 진입 HTML, 브라우저 제목은 `OASIS`
 - `locations_insert.sql`: 대피소/위치 데이터 적재용 SQL
 - `package.json`: npm 의존성 및 개발 스크립트
 - `package-lock.json`: npm 의존성 잠금 파일
@@ -103,6 +103,8 @@ FastAPI AI 서버와 Python 스케줄러가 있는 영역입니다.
   - 기상청 단기예보 API 수집
   - 지역별 수위 상승 속도 및 위험도 payload 생성
   - Express `POST /api/update-live-status`로 전송
+  - 기상청 격자 호출 간격, 429 cooldown, 동일 발표 시각 cache 적용
+  - `SCHEDULER_LOCK_PORT`로 중복 스케줄러 실행 차단
 - `schemas/risk_schema.py`
   - 위험도 예측 요청/응답 타입
   - 예측 시계열 타입
@@ -175,6 +177,8 @@ Express API 게이트웨이입니다.
 - `/api/shelters`로 대피소 목록 제공
 - 카카오모빌리티 자동차 경로와 T맵 도보 경로 API 제공
 - 도보 경로 API 키가 없으면 OSRM 또는 직선거리 fallback 반환
+- `GET /api/vworld/seoul-districts`로 VWorld 서울 자치구 경계 중계
+- VWorld 키 또는 upstream이 없으면 빈 경계를 정상 응답하여 지도 fallback 유지
 
 ## public
 
@@ -198,14 +202,14 @@ Express API 게이트웨이입니다.
 
 | path | page |
 | --- | --- |
-| `/` | `/dashboard`로 redirect |
+| `/` | `/map`으로 redirect |
 | `/dashboard` | `DashboardPage` |
 | `/map` | `MapViewPage` |
-| `/digital-twin` | `DigitalTwinPage` |
+| `/digital-twin` | `/dashboard`로 redirect |
 | `/risk-analysis` | `RiskAnalysisPage` |
 | `/alerts` | `AlertCenterPage` |
 | `/reports` | `ReportsPage` |
-| `/safe-route` | `SafeRoutePage` |
+| `/safe-route` | `/dashboard`로 redirect |
 | `/simulation` | `SimulationPage` |
 | `/login` | `LoginPage` |
 | `/signup` | `SignupPage` |
@@ -217,7 +221,7 @@ Express API 게이트웨이입니다.
 - `flood-prediction/RiskPredictionChart.tsx`: `/api/risk-forecast` 기반 위험도 차트
 - `flood-prediction/mockData.ts`: 센서/지도/이벤트 최소 fallback 데이터
 - `kakao-map/KakaoMapPanel.tsx`: 대시보드 지도형 요약 패널
-- `kakao-map/RegionRiskMapPanel.tsx`: 지역별 위험도 마커, 자치구 경계 polygon, InfoWindow, 예측 시간대 전환, AI 상세 분석 이동
+- `kakao-map/RegionRiskMapPanel.tsx`: VWorld 자치구 경계, 지역별 위험도, 맨홀, 대피소/경로 레이어를 통합한 카카오 지도. `selectedRegion`에 맞춰 맨홀과 대피소를 필터링하고 1~7레벨 줌을 허용
 - `safe-route/`
   - `ShelterMapPanel.tsx`: `VITE_KAKAO_MAP_KEY`와 `useKakaoLoader` 기반 대피소 지도 패널, `/api/shelters` 데이터 표시
   - `ShelterList.tsx`: 대피소 목록과 경로 안내 UI
@@ -236,15 +240,11 @@ Express API 게이트웨이입니다.
   - 실시간 AI 위험도 패널
   - 위험도 차트
   - OpenAI 또는 fallback 기반 상황별 알림 카드
-- `SafeRoute/SafeRoutePage.tsx`
-  - 대피소 선택
-  - 자동차/도보 경로 안내
 - `MapView/MapViewPage.tsx`
   - 선택 지역과 지도 레이어 토글
-  - `VITE_EXTERNAL_SENSOR_API_BASE_URL`의 `/api/manholes` 데이터를 기반으로 하수관로 수위 반경 표시
+  - 지역별 위험도, 하수관로 수위, 대피 경로 통합 레이어
+  - `VITE_EXTERNAL_SENSOR_API_BASE_URL`의 `/api/manholes` 데이터를 선택 자치구 기준으로 표시
   - `selectedRegion`을 공유 store에 반영
-- `DigitalTwin/DigitalTwinPage.tsx`
-  - `VITE_EXTERNAL_SENSOR_API_BASE_URL`의 `/api/manholes` 데이터를 카카오 지도 위에 수위별 마커로 표시
 - `Simulation/SimulationPage.tsx`
   - VWorld WebGL/Cesium 기반 침수 시뮬레이션 화면
   - `VITE_SWMM_API_BASE_URL`의 `/api/test/swmm?rainfall=...` 호출
@@ -262,6 +262,7 @@ Express API 게이트웨이입니다.
 - `api/aiApi.ts`: 위험도 예측, 지역 상태, 위험도 차트, 상황별 알림 API
 - `api/authApi.ts`: 로그인, 회원가입, 로그아웃 API
 - `api/externalApi.ts`: 외부 맨홀 센서 API와 SWMM API 기본 주소 관리
+- `api/vworldApi.ts`: Express의 `/api/vworld/seoul-districts` 응답을 자치구 polygon으로 변환
 - `components/AppShell.tsx`: 상단바, 사이드바, 공통 레이아웃
 - `components/MetricTile.tsx`: 지표 카드
 - `components/RoleGuard.tsx`: 역할 기반 접근 제어
@@ -269,7 +270,6 @@ Express API 게이트웨이입니다.
 - `store/authStore.ts`: 인증 상태 저장
 - `store/dashboardStore.ts`: 선택 지역과 대시보드 fallback 상태
 - `constants/regionCoordinates.ts`: 서울 자치구 대표 좌표와 지역 선택 목록
-- `constants/seoulDistrictBoundaries.ts`: 자치구 경계 polygon 좌표
 - `types/domain.ts`: 공통 도메인 타입
 
 ## 데이터 흐름
@@ -308,22 +308,28 @@ alert_generator.py
 지도/경로 흐름:
 
 ```text
-React SafeRoutePage / ShelterMapPanel
+React MapViewPage / RegionRiskMapPanel
         ↓
 VITE_KAKAO_MAP_KEY로 Kakao 지도 SDK 로드
+Express /api/vworld/seoul-districts로 서울 자치구 경계 조회
         ↓
 Express /api/shelters, /api/route/car, /api/route/walk
         ↓
 PostgreSQL locations / 카카오모빌리티 / T맵 API / OSRM fallback
+
+selectedRegion 변경
+  ├─ 선택 구 경계의 맨홀만 표시
+  ├─ 선택 구 주소/경계의 대피소만 표시
+  └─ 다른 구에서 선택한 대피소와 활성 경로 초기화
 ```
 
-디지털 트윈/시뮬레이션 흐름:
+통합 지도/시뮬레이션 흐름:
 
 ```text
-React MapViewPage / DigitalTwinPage / SimulationPage
+React MapViewPage / SimulationPage
         ↓
 Spring Boot 센서/SWMM 백엔드
-  ├─ MapViewPage / DigitalTwinPage: GET {VITE_EXTERNAL_SENSOR_API_BASE_URL}/api/manholes
+  ├─ MapViewPage: GET {VITE_EXTERNAL_SENSOR_API_BASE_URL}/api/manholes
   └─ SimulationPage: GET {VITE_SWMM_API_BASE_URL}/api/test/swmm?rainfall=...
         ↓
 PostgreSQL sensor_logs/locations 또는 Python SWMM 목 서버
@@ -342,7 +348,7 @@ PostgreSQL locations / sensor_logs
         ↓
 GET /api/manholes, GET /api/sensors/latest
         ↓
-React MapViewPage / DigitalTwinPage
+React MapViewPage
 ```
 
 ## 주요 환경 변수
@@ -358,6 +364,7 @@ React MapViewPage / DigitalTwinPage
 - `VITE_SWMM_API_BASE_URL`: Simulation SWMM 테스트 API 기본 주소, 기본값 `http://localhost:8080`
 - `KAKAO_REST_API_KEY`: Express 서버에서 사용하는 카카오모빌리티 REST API 키
 - `TMAP_APP_KEY`: Express 서버에서 사용하는 T맵 보행자 경로 API 키
+- `VWORLD_API_KEY`, `VWORLD_DOMAIN`: Express 서버의 서울 자치구 경계 조회 설정
 
 `ai-server/.env`:
 
@@ -366,6 +373,8 @@ React MapViewPage / DigitalTwinPage
 - `KMA_API_KEY`, `KMA_FORECAST_URL`, `KMA_NX`, `KMA_NY`: 기상청 단기예보 API 설정
 - `TARGET_GU_NAME`, `TARGET_DRAINPIPE_KEYWORD`, `DANGER_WATER_LEVEL_M`: 수집 대상 지역과 위험 수위 기준
 - `EXPRESS_BASE_URL`, `COLLECT_INTERVAL_SECONDS`: 스케줄러 전송 대상과 수집 주기
+- `KMA_RATE_LIMIT_COOLDOWN_SECONDS`, `KMA_REQUEST_INTERVAL_SECONDS`: 기상청 호출 제한 대응
+- `SCHEDULER_LOCK_PORT`: 스케줄러 중복 실행 방지용 localhost 잠금 포트
 - `OPENAI_API_KEY`, `OPENAI_MODEL`: 상황별 침수 알림 생성용 OpenAI 설정
 
 ## 유지 중인 핵심 API
@@ -373,6 +382,7 @@ React MapViewPage / DigitalTwinPage
 Express:
 
 - `GET /api/health`
+- `GET /api/vworld/seoul-districts`
 - `POST /api/auth/signup`
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
