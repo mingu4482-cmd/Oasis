@@ -86,10 +86,11 @@ const defaultLayerVisibility = {
   safeRoute: false,
 };
 
-function useRegionalStatus() {
+function useRegionalStatus(enabled: boolean) {
   return useQuery({
     queryKey: ["regional-status"],
     queryFn: fetchRegionalStatus,
+    enabled: enabled,
     staleTime: 30_000,
     refetchInterval: 30_000,
   });
@@ -105,14 +106,12 @@ function useManholes(enabled: boolean) {
       if (!response.ok) throw new Error(SENSOR_API_ERROR_MESSAGE);
       const data = (await response.json()) as Manhole[];
 
-      return data.filter(
-        (manhole) =>
-          typeof manhole.latitude === "number" &&
-          typeof manhole.longitude === "number" &&
-          manhole.latitude !== 0 &&
-          manhole.longitude !== 0 &&
-          isWithinSeoul(manhole.latitude, manhole.longitude),
-      );
+      return data.filter((manhole) => (
+          typeof manhole.latitude === 'number'
+          && typeof manhole.longitude === 'number'
+          && manhole.latitude !== 0
+          && manhole.longitude !== 0
+));
     },
     enabled,
     staleTime: 30_000,
@@ -176,7 +175,7 @@ function RegionRiskMapContent({
   const [selectedManholeId, setSelectedManholeId] = useState<number | null>(
     null,
   );
-  const { data: regionalStatus, isFetching, isError } = useRegionalStatus();
+  const { data: regionalStatus, isFetching, isError } = useRegionalStatus(true);
   const layers = { ...defaultLayerVisibility, ...layerVisibility };
   const { data: manholes = [], isError: isManholeError } = useManholes(
     layers.waterLevel,
@@ -611,10 +610,10 @@ function RegionRiskMapContent({
           </span>
         </div>
       ) : null}
-      {isFetching ? (
+      {isFetching && layers.regionalRisk ? (
         <div className="region-map-error">데이터 갱신 중</div>
       ) : null}
-      {isError ? (
+      {isError && layers.regionalRisk ? (
         <div className="region-map-error">
           지역별 위험도 데이터를 불러오지 못했습니다.
         </div>
@@ -633,7 +632,7 @@ function RegionRiskMapFallback(props: RegionRiskMapPanelProps) {
   const setSelectedRegion = useDashboardStore(
     (state) => state.setSelectedRegion,
   );
-  const { data: regionalStatus } = useRegionalStatus();
+  const { data: regionalStatus } = useRegionalStatus(true);
 
   const regionItems = REGION_COORDINATES.map((coordinate) => {
     const status = regionalStatus?.regionStatusMap?.[coordinate.name];

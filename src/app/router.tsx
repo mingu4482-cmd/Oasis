@@ -29,7 +29,7 @@ export const routes: RouteObject[] = [
       { path: 'alerts', element: <RoleGuard><AlertCenterPage /></RoleGuard> },
       { path: 'reports', element: <RoleGuard><ReportsPage /></RoleGuard> },
       { path: 'safe-route', element: <Navigate to="/dashboard" replace /> },
-      { path: 'simulation', element: <RoleGuard><SimulationPage /></RoleGuard> },
+      { path: 'simulation', element: <SimulationPage/> },
     ],
   },
   // 🌟 로그인/회원가입은 메뉴바(AppShell) 밖에서 렌더링되도록 분리!
