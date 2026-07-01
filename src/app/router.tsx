@@ -1,6 +1,5 @@
 import { Navigate, RouteObject, Outlet } from 'react-router-dom';
 import { AlertCenterPage } from '../pages/AlertCenter/AlertCenterPage';
-import { DashboardPage } from '../pages/Dashboard/DashboardPage';
 import { ReportsPage } from '../pages/Reports/ReportsPage';
 import { RiskAnalysisPage } from '../pages/RiskAnalysis/RiskAnalysisPage';
 import { SimulationPage } from '../pages/Simulation/SimulationPage';
@@ -22,13 +21,13 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <Navigate to="/map" replace /> },
       // 🌟 팀원이 추가한 RoleGuard 와 동생이 추가한 SimulationPage 모두 병합!
-      { path: 'dashboard', element: <RoleGuard><DashboardPage /></RoleGuard> },
       { path: 'map', element: <RoleGuard><MapViewPage /></RoleGuard> },
-      { path: 'digital-twin', element: <Navigate to="/dashboard" replace /> },
+      { path: 'dashboard', element: <Navigate to="/map" replace /> },
+      { path: 'digital-twin', element: <Navigate to="/map" replace /> },
       { path: 'risk-analysis', element: <RoleGuard><RiskAnalysisPage /></RoleGuard> },
       { path: 'alerts', element: <RoleGuard><AlertCenterPage /></RoleGuard> },
       { path: 'reports', element: <RoleGuard><ReportsPage /></RoleGuard> },
-      { path: 'safe-route', element: <Navigate to="/dashboard" replace /> },
+      { path: 'safe-route', element: <Navigate to="/map" replace /> },
       { path: 'simulation', element: <SimulationPage/> },
     ],
   },

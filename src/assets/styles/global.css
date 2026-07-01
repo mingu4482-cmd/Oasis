@@ -1377,23 +1377,26 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .manhole-map-marker {
   position: relative;
   display: block;
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   padding: 0;
   border: 2px solid #fff;
   border-radius: 999px;
-  background: var(--manhole-color);
-  box-shadow: 0 0 0 4px rgba(15, 23, 42, .12), 0 4px 12px rgba(15, 23, 42, .28);
+  background:
+    linear-gradient(90deg, transparent 42%, rgba(255, 255, 255, .88) 42% 58%, transparent 58%),
+    linear-gradient(0deg, transparent 42%, rgba(255, 255, 255, .88) 42% 58%, transparent 58%),
+    var(--manhole-color);
+  box-shadow: 0 0 0 4px rgba(15, 23, 42, .14), 0 4px 12px rgba(15, 23, 42, .30);
   cursor: pointer;
 }
 
 .manhole-map-marker::after {
   content: '';
   position: absolute;
-  inset: -5px;
-  border: 1px solid var(--manhole-color);
+  inset: 1px;
+  border: 1px solid rgba(255, 255, 255, .9);
   border-radius: 999px;
-  opacity: .55;
+  opacity: .85;
 }
 
 .manhole-map-marker:hover,
@@ -1545,12 +1548,39 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 }
 
 .safe-route-shelter-dot {
+  position: relative;
   width: 14px;
-  height: 14px;
-  border: 3px solid #fff;
-  border-radius: 999px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 4px;
   background: var(--shelter-color);
-  box-shadow: 0 0 0 8px color-mix(in srgb, var(--shelter-color) 22%, transparent);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--shelter-color) 22%, transparent), 0 4px 10px rgba(15, 23, 42, .22);
+}
+
+.safe-route-shelter-dot::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -7px;
+  width: 10px;
+  height: 10px;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  background: var(--shelter-color);
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 3px 0 0 0;
+}
+
+.safe-route-shelter-dot::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 3px;
+  height: 5px;
+  border-radius: 2px 2px 0 0;
+  background: #fff;
+  transform: translateX(-50%);
 }
 
 .safe-route-shelter-marker span:not(.safe-route-shelter-dot):not(.sr-only) {
@@ -1570,9 +1600,9 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 }
 
 .safe-route-shelter-marker.active .safe-route-shelter-dot {
-  width: 18px;
-  height: 18px;
-  box-shadow: 0 0 0 10px color-mix(in srgb, var(--shelter-color) 28%, transparent);
+  width: 17px;
+  height: 14px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--shelter-color) 28%, transparent), 0 5px 12px rgba(15, 23, 42, .26);
 }
 
 .safe-route-shelter-marker.active span:not(.safe-route-shelter-dot):not(.sr-only) {

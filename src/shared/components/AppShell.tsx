@@ -65,7 +65,7 @@ export function AppShell({ children }: PropsWithChildren) {
   const visibleNavGroups = navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => item.roles.includes(activeRole)),
+      items: group.items.filter((item) => item.to !== '/dashboard' && item.roles.includes(activeRole)),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -81,7 +81,7 @@ export function AppShell({ children }: PropsWithChildren) {
       await logout();
     } finally {
       clearUser();
-      navigate('/dashboard', { replace: true });
+      navigate('/map', { replace: true });
     }
   };
 
