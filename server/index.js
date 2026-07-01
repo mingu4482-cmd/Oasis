@@ -263,7 +263,12 @@ app.get('/api/health', async (_request, response) => {
 
 app.get('/api/vworld/seoul-districts', async (request, response) => {
   if (!vworldApiKey) {
-    response.status(500).json({ message: 'VWORLD_API_KEY가 서버에 설정되지 않았습니다.' });
+    response.json({
+      response: {
+        status: 'NOT_CONFIGURED',
+        result: { featureCollection: { features: [] } },
+      },
+    });
     return;
   }
 
@@ -295,7 +300,12 @@ app.get('/api/vworld/seoul-districts', async (request, response) => {
     response.json(vworldResponse.data);
   } catch (error) {
     console.error('[vworld districts] request failed:', error.message);
-    response.status(502).json({ message: 'VWorld 행정구역 경계 조회에 실패했습니다.' });
+    response.json({
+      response: {
+        status: 'UPSTREAM_UNAVAILABLE',
+        result: { featureCollection: { features: [] } },
+      },
+    });
   }
 });
 
