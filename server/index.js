@@ -288,7 +288,7 @@ app.post('/api/auth/signup', async (request, response) => {
           role, name, email, phone, password_hash,
           organization, department, address, emergency_contact, memo
         )
-        values ($1, $2, lower($3), $4, $5, $6, $7, $8, $9, $10)
+        values ($1::user_role, $2, lower($3), $4, $5, $6, $7, $8, $9, $10)
         returning id, role, name, email, phone, organization, department, address, emergency_contact, memo
       `,
       [
