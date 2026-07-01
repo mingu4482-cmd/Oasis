@@ -116,6 +116,14 @@ const isWithinSeoul = (latitude: number, longitude: number) =>
     boundary.paths.some((path) => isPointInPolygon(latitude, longitude, path)),
   );
 
+const isPointInAnyBoundary = (
+  point: { lat: number; lng: number },
+  boundaryPaths: Array<Array<{ lat: number; lng: number }>>,
+) =>
+  boundaryPaths.some((path) =>
+    isPointInPolygon(point.lat, point.lng, path),
+  );
+
 interface RegionRiskMapPanelProps {
   className?: string;
   height?: string;
