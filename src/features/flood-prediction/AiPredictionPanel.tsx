@@ -99,9 +99,9 @@ export function AiPredictionPanel({ children }: AiPredictionPanelProps) {
     { label: '상승 속도', value: liveData?.waterLevelRiseRate, unit: 'm/h', percent: toMetricPercent(liveData?.waterLevelRiseRate, 2) },
   ];
   const forecastBars = [
-    { label: '+1h', value: liveData?.forecastRainfall1h },
-    { label: '+2h', value: liveData?.forecastRainfall2h },
-    { label: '+3h', value: liveData?.forecastRainfall3h },
+    { label: '+1h', value: liveData?.forecastStatus === 'FAILED' ? undefined : liveData?.forecastRainfall1h },
+    { label: '+2h', value: liveData?.forecastStatus === 'FAILED' ? undefined : liveData?.forecastRainfall2h },
+    { label: '+3h', value: liveData?.forecastStatus === 'FAILED' ? undefined : liveData?.forecastRainfall3h },
   ];
   const forecastMax = Math.max(10, ...forecastBars.map((bar) => (typeof bar.value === 'number' ? bar.value : 0)));
   return (
