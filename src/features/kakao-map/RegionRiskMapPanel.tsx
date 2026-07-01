@@ -59,6 +59,20 @@ const DISTRICT_BOUNDARY_MAP = new Map(
   SEOUL_DISTRICT_BOUNDARIES.map((boundary) => [boundary.name, boundary.paths]),
 );
 
+const SEOUL_BOUNDS = {
+  sw: { lat: 37.413294, lng: 126.734086 },
+  ne: { lat: 37.715133, lng: 127.269311 },
+};
+
+function clampToSeoul(map: any) {
+  const c = map.getCenter();
+  const lat = Math.min(Math.max(c.getLat(), SEOUL_BOUNDS.sw.lat), SEOUL_BOUNDS.ne.lat);
+  const lng = Math.min(Math.max(c.getLng(), SEOUL_BOUNDS.sw.lng), SEOUL_BOUNDS.ne.lng);
+  if (lat !== c.getLat() || lng !== c.getLng()) {
+    map.setCenter(new window.kakao.maps.LatLng(lat, lng));
+  }
+}
+
 interface Manhole {
   locationId: number;
   name: string;
@@ -67,42 +81,40 @@ interface Manhole {
   waterLevel: number;
 }
 
-const isWithinSeoul = (lat: number, lng: number) =>
-  lat >= 37.4 && lat <= 37.7 && lng >= 126.75 && lng <= 127.2;
+const isPointInPolygon = (
+  latitude: number,
+  longitude: number,
+  path: Array<{ lat: number; lng: number }>,
+) => {
+  let isInside = false;
 
-function isPointInPolygon(
-  point: { lat: number; lng: number },
-  polygon: Array<{ lat: number; lng: number }>,
-) {
-  let inside = false;
-
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-    const current = polygon[i];
-    const previous = polygon[j];
+  for (
+    let current = 0, previous = path.length - 1;
+    current < path.length;
+    previous = current++
+  ) {
+    const currentPoint = path[current];
+    const previousPoint = path[previous];
     const crossesLatitude =
-      current.lat > point.lat !== previous.lat > point.lat;
+      currentPoint.lat > latitude !== previousPoint.lat > latitude;
+    const intersectionLongitude =
+      ((previousPoint.lng - currentPoint.lng) *
+        (latitude - currentPoint.lat)) /
+        (previousPoint.lat - currentPoint.lat) +
+      currentPoint.lng;
 
-    if (!crossesLatitude) continue;
-
-    const intersectLng =
-      ((previous.lng - current.lng) * (point.lat - current.lat)) /
-        (previous.lat - current.lat) +
-      current.lng;
-
-    if (point.lng < intersectLng) {
-      inside = !inside;
+    if (crossesLatitude && longitude < intersectionLongitude) {
+      isInside = !isInside;
     }
   }
 
-  return inside;
-}
+  return isInside;
+};
 
-function isPointInAnyBoundary(
-  point: { lat: number; lng: number },
-  boundaryPaths: Array<Array<{ lat: number; lng: number }>>,
-) {
-  return boundaryPaths.some((path) => isPointInPolygon(point, path));
-}
+const isWithinSeoul = (latitude: number, longitude: number) =>
+  SEOUL_DISTRICT_BOUNDARIES.some((boundary) =>
+    boundary.paths.some((path) => isPointInPolygon(latitude, longitude, path)),
+  );
 
 interface RegionRiskMapPanelProps {
   className?: string;
@@ -123,10 +135,11 @@ const defaultLayerVisibility = {
   safeRoute: false,
 };
 
-function useRegionalStatus() {
+function useRegionalStatus(enabled: boolean) {
   return useQuery({
     queryKey: ["regional-status"],
     queryFn: fetchRegionalStatus,
+    enabled: enabled,
     staleTime: 30_000,
     refetchInterval: 30_000,
   });
@@ -213,7 +226,7 @@ function RegionRiskMapContent({
   const [selectedManholeId, setSelectedManholeId] = useState<number | null>(
     null,
   );
-  const { data: regionalStatus, isFetching, isError } = useRegionalStatus();
+  const { data: regionalStatus, isFetching, isError } = useRegionalStatus(true);
   const layers = { ...defaultLayerVisibility, ...layerVisibility };
   const { data: manholes = [], isError: isManholeError } = useManholes(
     layers.waterLevel,
@@ -374,7 +387,9 @@ function RegionRiskMapContent({
         center={{ lat: center.lat, lng: center.lng }}
         isPanto
         level={8}
+        maxLevel={8}
         style={{ width: "100%", height: "100%" }}
+        onCenterChanged={clampToSeoul}
       >
         {layers.regionalRisk
           ? regionItems.map((item) => (
@@ -657,10 +672,10 @@ function RegionRiskMapContent({
           </span>
         </div>
       ) : null}
-      {isFetching ? (
+      {isFetching && layers.regionalRisk ? (
         <div className="region-map-error">데이터 갱신 중</div>
       ) : null}
-      {isError ? (
+      {isError && layers.regionalRisk ? (
         <div className="region-map-error">
           지역별 위험도 데이터를 불러오지 못했습니다.
         </div>
@@ -679,7 +694,7 @@ function RegionRiskMapFallback(props: RegionRiskMapPanelProps) {
   const setSelectedRegion = useDashboardStore(
     (state) => state.setSelectedRegion,
   );
-  const { data: regionalStatus } = useRegionalStatus();
+  const { data: regionalStatus } = useRegionalStatus(true);
 
   const regionItems = REGION_COORDINATES.map((coordinate) => {
     const status = regionalStatus?.regionStatusMap?.[coordinate.name];
