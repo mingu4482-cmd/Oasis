@@ -10,6 +10,7 @@ dotenv.config();
 const app = express();
 const port = Number(process.env.API_PORT ?? 4000);
 const aiServerUrl = process.env.AI_SERVER_URL ?? 'http://localhost:8000';
+const vworldApiKey = (process.env.VWORLD_API_KEY ?? process.env.VITE_VWORLD_API_KEY ?? '').trim();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -258,6 +259,44 @@ function validateSignup(body) {
 app.get('/api/health', async (_request, response) => {
   await pool.query('select 1');
   response.json({ ok: true });
+});
+
+app.get('/api/vworld/seoul-districts', async (request, response) => {
+  if (!vworldApiKey) {
+    response.status(500).json({ message: 'VWORLD_API_KEY가 서버에 설정되지 않았습니다.' });
+    return;
+  }
+
+  const requestHostname = request.hostname === '127.0.0.1' ? 'localhost' : request.hostname;
+  const vworldDomain = (process.env.VWORLD_DOMAIN ?? process.env.VITE_VWORLD_DOMAIN ?? requestHostname).trim();
+
+  try {
+    const vworldResponse = await axios.get('https://api.vworld.kr/req/data', {
+      params: {
+        service: 'data',
+        version: '2.0',
+        request: 'GetFeature',
+        key: vworldApiKey,
+        domain: vworldDomain,
+        format: 'json',
+        errorformat: 'json',
+        size: '1000',
+        page: '1',
+        data: 'LT_C_ADSIGG_INFO',
+        geomfilter: 'BOX(126.734086,37.413294,127.269311,37.715133)',
+        columns: 'sig_cd,sig_kor_nm,full_nm,ag_geom',
+        geometry: 'true',
+        attribute: 'true',
+        crs: 'EPSG:4326',
+      },
+      timeout: 10000,
+    });
+
+    response.json(vworldResponse.data);
+  } catch (error) {
+    console.error('[vworld districts] request failed:', error.message);
+    response.status(502).json({ message: 'VWorld 행정구역 경계 조회에 실패했습니다.' });
+  }
 });
 
 app.post('/api/auth/signup', async (request, response) => {
