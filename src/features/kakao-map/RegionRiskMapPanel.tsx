@@ -70,6 +70,40 @@ interface Manhole {
 const isWithinSeoul = (lat: number, lng: number) =>
   lat >= 37.4 && lat <= 37.7 && lng >= 126.75 && lng <= 127.2;
 
+function isPointInPolygon(
+  point: { lat: number; lng: number },
+  polygon: Array<{ lat: number; lng: number }>,
+) {
+  let inside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const current = polygon[i];
+    const previous = polygon[j];
+    const crossesLatitude =
+      current.lat > point.lat !== previous.lat > point.lat;
+
+    if (!crossesLatitude) continue;
+
+    const intersectLng =
+      ((previous.lng - current.lng) * (point.lat - current.lat)) /
+        (previous.lat - current.lat) +
+      current.lng;
+
+    if (point.lng < intersectLng) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function isPointInAnyBoundary(
+  point: { lat: number; lng: number },
+  boundaryPaths: Array<Array<{ lat: number; lng: number }>>,
+) {
+  return boundaryPaths.some((path) => isPointInPolygon(point, path));
+}
+
 interface RegionRiskMapPanelProps {
   className?: string;
   height?: string;
@@ -231,8 +265,17 @@ function RegionRiskMapContent({
   const center = selectedRegionCenter;
   const visibleManholes = useMemo(() => {
     if (!layers.waterLevel) return [];
-    return manholes;
-  }, [layers.waterLevel, manholes]);
+
+    const selectedBoundaryPaths = DISTRICT_BOUNDARY_MAP.get(selectedRegion);
+    if (!selectedBoundaryPaths?.length) return [];
+
+    return manholes.filter((manhole) =>
+      isPointInAnyBoundary(
+        { lat: manhole.latitude, lng: manhole.longitude },
+        selectedBoundaryPaths,
+      ),
+    );
+  }, [layers.waterLevel, manholes, selectedRegion]);
   const selectedManhole = layers.waterLevel
     ? (visibleManholes.find(
         (manhole) => manhole.locationId === selectedManholeId,
