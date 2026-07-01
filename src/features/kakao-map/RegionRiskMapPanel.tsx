@@ -286,17 +286,8 @@ function RegionRiskMapContent({
   const center = selectedRegionCenter;
   const visibleManholes = useMemo(() => {
     if (!layers.waterLevel) return [];
-
-    const selectedBoundaryPaths = DISTRICT_BOUNDARY_MAP.get(selectedRegion);
-    if (!selectedBoundaryPaths?.length) return [];
-
-    return manholes.filter((manhole) =>
-      isPointInAnyBoundary(
-        { lat: manhole.latitude, lng: manhole.longitude },
-        selectedBoundaryPaths,
-      ),
-    );
-  }, [layers.waterLevel, manholes, selectedRegion]);
+    return manholes;
+  }, [layers.waterLevel, manholes]);
   const selectedManhole = layers.waterLevel
     ? (visibleManholes.find(
         (manhole) => manhole.locationId === selectedManholeId,

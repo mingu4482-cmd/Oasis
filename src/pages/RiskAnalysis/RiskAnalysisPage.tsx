@@ -18,6 +18,13 @@ const formatTimestamp = (timestamp?: string) => {
   });
 };
 
+const formatAlertSource = (source?: string) => {
+  if (source === 'rule-based') return '규칙 기반';
+  if (source === 'openai') return 'OpenAI';
+  if (source === 'fallback') return '대체 생성';
+  return source ?? '대기 중';
+};
+
 function buildAlertKey(status: LiveStatusResponse, region: string) {
   return [
     region,
@@ -66,7 +73,7 @@ function SituationAlertCard() {
           <span className="eyebrow">상황별 알림</span>
           <h2>{alert?.title ?? '알림 생성 대기'}</h2>
         </div>
-        <span className="alert-source-badge">{alert?.source ?? '대기 중'}</span>
+        <span className="alert-source-badge">{formatAlertSource(alert?.source)}</span>
       </div>
 
       {liveStatusQuery.isFetching || alertQuery.isFetching ? <div className="alert-empty-state">데이터 갱신 중</div> : null}
@@ -117,7 +124,7 @@ function SituationAlertCard() {
           </div>
           <div className="summary-row">
             <span>생성 방식</span>
-            <strong>{alert.source ?? '-'}</strong>
+            <strong>{formatAlertSource(alert.source)}</strong>
           </div>
         </div>
       ) : null}
