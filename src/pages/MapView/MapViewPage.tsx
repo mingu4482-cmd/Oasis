@@ -232,7 +232,7 @@ export function MapViewPage() {
 
       <div className="map-view-floating-topbar" aria-label="지도 도구">
         <div className="map-view-title-chip">
-          <MapPin size={17} />
+          <MapPin size={15} />
           <strong>{selectedRegion}</strong>
         </div>
 
@@ -259,7 +259,7 @@ export function MapViewPage() {
                 title={layer.label}
                 onClick={() => toggleLayer(layer.id)}
               >
-                <Icon size={17} />
+                <Icon size={15} />
                 <span>{layer.label}</span>
               </button>
             );
