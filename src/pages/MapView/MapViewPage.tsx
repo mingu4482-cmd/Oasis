@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, Bell, CheckSquare, ChevronLeft, ChevronRight, CloudRain, Droplets, FileText, Gauge, Layers, List, MapPin, PlayCircle, Route, Waves, X } from 'lucide-react';
+import { Activity, AlertTriangle, Bell, CheckSquare, ChevronLeft, ChevronRight, CloudRain, Droplets, FileText, Gauge, Layers, List, MapPin, MapPinned as Route, PlayCircle, Waves, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { KakaoMapPanel } from '../../features/kakao-map/KakaoMapPanel';
@@ -13,6 +13,8 @@ const CONTROL_LAYERS = [
   { id: 'rainfall', label: '강우량 관측', icon: CloudRain },
   { id: 'safeRoute', label: '대피 경로', icon: Route },
 ] as const;
+
+const VISIBLE_CONTROL_LAYERS = CONTROL_LAYERS.filter((layer) => layer.id !== 'rainfall');
 
 const MAP_NAV_LINKS = [
   { to: '/dashboard', label: '상황판', icon: Gauge },
@@ -65,7 +67,7 @@ export function MapViewPage() {
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
     regionalRisk: true,
     waterLevel: true,
-    rainfall: true,
+    rainfall: false,
     safeRoute: false,
   });
 
@@ -199,13 +201,13 @@ export function MapViewPage() {
             <strong>표시 레이어</strong>
           </div>
           <div className="map-view-layer-list">
-            {CONTROL_LAYERS.map((layer) => {
+            {VISIBLE_CONTROL_LAYERS.map((layer) => {
               const Icon = layer.icon;
               return (
                 <button
                   type="button"
                   key={`panel-${layer.id}`}
-                  className={layerVisibility[layer.id] ? 'map-view-layer-row active' : 'map-view-layer-row'}
+                  className={layerVisibility[layer.id] ? `map-view-layer-row active ${layer.id}` : `map-view-layer-row ${layer.id}`}
                   onClick={() => toggleLayer(layer.id)}
                 >
                   <Icon size={15} />
@@ -248,13 +250,13 @@ export function MapViewPage() {
         </label>
 
         <div className="map-view-layer-toolbar" aria-label="레이어 표시 항목">
-          {CONTROL_LAYERS.map((layer) => {
+          {VISIBLE_CONTROL_LAYERS.map((layer) => {
             const Icon = layer.icon;
             return (
               <button
                 type="button"
                 key={layer.id}
-                className={layerVisibility[layer.id] ? 'map-view-tool-button active' : 'map-view-tool-button'}
+                className={layerVisibility[layer.id] ? `map-view-tool-button active ${layer.id}` : `map-view-tool-button ${layer.id}`}
                 aria-pressed={layerVisibility[layer.id]}
                 title={layer.label}
                 onClick={() => toggleLayer(layer.id)}

@@ -2337,6 +2337,12 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   color: var(--brand-700);
 }
 
+.map-view-layer-row.safeRoute.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
 .map-view-layer-row strong {
   font-size: 11px;
 }
@@ -2425,6 +2431,11 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   border-color: var(--brand-600);
   background: var(--brand-600);
   color: #fff;
+}
+
+.map-view-tool-button.safeRoute.active {
+  border-color: #2563eb;
+  background: #2563eb;
 }
 
 .map-view-floating-note {

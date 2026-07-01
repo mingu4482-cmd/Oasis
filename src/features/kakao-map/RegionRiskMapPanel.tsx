@@ -20,8 +20,11 @@ import {
   REGION_COORDINATES,
   findRegionCoordinate,
 } from "../../shared/constants/regionCoordinates";
-import { SEOUL_DISTRICT_BOUNDARIES } from "../../shared/constants/seoulDistrictBoundaries";
 import { useDashboardStore } from "../../shared/store/dashboardStore";
+import {
+  fetchSeoulDistrictBoundaries,
+  type DistrictBoundary,
+} from "../../shared/api/vworldApi";
 
 declare global {
   interface Window {
@@ -54,10 +57,6 @@ const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
   if (score >= 40) return "CAUTION";
   return "SAFE";
 };
-
-const DISTRICT_BOUNDARY_MAP = new Map(
-  SEOUL_DISTRICT_BOUNDARIES.map((boundary) => [boundary.name, boundary.paths]),
-);
 
 const SEOUL_BOUNDS = {
   sw: { lat: 37.413294, lng: 126.734086 },
@@ -111,11 +110,6 @@ const isPointInPolygon = (
   return isInside;
 };
 
-const isWithinSeoul = (latitude: number, longitude: number) =>
-  SEOUL_DISTRICT_BOUNDARIES.some((boundary) =>
-    boundary.paths.some((path) => isPointInPolygon(latitude, longitude, path)),
-  );
-
 const isPointInAnyBoundary = (
   point: { lat: number; lng: number },
   boundaryPaths: Array<Array<{ lat: number; lng: number }>>,
@@ -123,6 +117,14 @@ const isPointInAnyBoundary = (
   boundaryPaths.some((path) =>
     isPointInPolygon(point.lat, point.lng, path),
   );
+
+const findBoundaryPathsByCenter = (
+  boundaries: DistrictBoundary[],
+  center: { lat: number; lng: number },
+) =>
+  boundaries.find((boundary) =>
+    isPointInAnyBoundary(center, boundary.paths),
+  )?.paths ?? [];
 
 interface RegionRiskMapPanelProps {
   className?: string;
@@ -153,6 +155,15 @@ function useRegionalStatus(enabled: boolean) {
   });
 }
 
+function useSeoulDistrictBoundaries() {
+  return useQuery({
+    queryKey: ["vworld-seoul-district-boundaries"],
+    queryFn: fetchSeoulDistrictBoundaries,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
+
 function useManholes(enabled: boolean) {
   return useQuery({
     queryKey: ["external-manholes"],
@@ -168,8 +179,7 @@ function useManholes(enabled: boolean) {
           typeof manhole.latitude === "number" &&
           typeof manhole.longitude === "number" &&
           manhole.latitude !== 0 &&
-          manhole.longitude !== 0 &&
-          isWithinSeoul(manhole.latitude, manhole.longitude),
+          manhole.longitude !== 0,
       );
     },
     enabled,
@@ -235,6 +245,21 @@ function RegionRiskMapContent({
     null,
   );
   const { data: regionalStatus, isFetching, isError } = useRegionalStatus(true);
+  const {
+    data: districtBoundaries = [],
+    isFetching: isBoundaryFetching,
+    isError: isBoundaryError,
+  } = useSeoulDistrictBoundaries();
+  const districtBoundaryMap = useMemo(
+    () =>
+      new Map(
+        districtBoundaries.map((boundary: DistrictBoundary) => [
+          boundary.name,
+          boundary.paths,
+        ]),
+      ),
+    [districtBoundaries],
+  );
   const layers = { ...defaultLayerVisibility, ...layerVisibility };
   const { data: manholes = [], isError: isManholeError } = useManholes(
     layers.waterLevel,
@@ -269,7 +294,12 @@ function RegionRiskMapContent({
         const riskLabel = toRiskLabel(status);
         return {
           ...coordinate,
-          boundaryPaths: DISTRICT_BOUNDARY_MAP.get(coordinate.name) ?? [],
+          boundaryPaths:
+            districtBoundaryMap.get(coordinate.name) ??
+            findBoundaryPathsByCenter(districtBoundaries, {
+              lat: coordinate.lat,
+              lng: coordinate.lng,
+            }),
           status,
           riskLabel,
           markerColor:
@@ -279,15 +309,33 @@ function RegionRiskMapContent({
               : RISK_MARKER_COLOR[riskLabel],
         };
       }),
-    [regionalStatus],
+    [districtBoundaries, districtBoundaryMap, regionalStatus],
   );
 
   const selectedRegionCenter = findRegionCoordinate(selectedRegion);
   const center = selectedRegionCenter;
   const visibleManholes = useMemo(() => {
     if (!layers.waterLevel) return [];
-    return manholes;
-  }, [layers.waterLevel, manholes]);
+
+    const selectedBoundaryPaths =
+      districtBoundaryMap.get(selectedRegion) ??
+      findBoundaryPathsByCenter(districtBoundaries, selectedRegionCenter);
+    if (!selectedBoundaryPaths?.length) return [];
+
+    return manholes.filter((manhole) =>
+      isPointInAnyBoundary(
+        { lat: manhole.latitude, lng: manhole.longitude },
+        selectedBoundaryPaths,
+      ),
+    );
+  }, [
+    districtBoundaries,
+    districtBoundaryMap,
+    layers.waterLevel,
+    manholes,
+    selectedRegion,
+    selectedRegionCenter,
+  ]);
   const selectedManhole = layers.waterLevel
     ? (visibleManholes.find(
         (manhole) => manhole.locationId === selectedManholeId,
@@ -408,9 +456,20 @@ function RegionRiskMapContent({
                         : 2
                     }
                     strokeColor={item.markerColor}
-                    strokeOpacity={item.name === activeInfoRegion ? 0.95 : 0}
+                    strokeOpacity={
+                      item.name === activeInfoRegion ||
+                      item.name === selectedRegion
+                        ? 0.95
+                        : 0
+                    }
                     fillColor={item.markerColor}
-                    fillOpacity={item.name === activeInfoRegion ? 0.24 : 0}
+                    fillOpacity={
+                      item.name === activeInfoRegion
+                        ? 0.24
+                        : item.name === selectedRegion
+                          ? 0.12
+                          : 0
+                    }
                     zIndex={
                       item.name === activeInfoRegion ||
                       item.name === selectedRegion
