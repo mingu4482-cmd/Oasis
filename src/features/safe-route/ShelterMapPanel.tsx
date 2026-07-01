@@ -64,9 +64,22 @@ export function ShelterMapPanel() {
   // 지도 초기화
   useEffect(() => {
     if (kakaoLoading || error || !kakaoMapKey || !window.kakao?.maps?.Map || !mapRef.current) return;
+    const SEOUL_BOUNDS = {
+      sw: { lat: 37.413294, lng: 126.734086 },
+      ne: { lat: 37.715133, lng: 127.269311 },
+    };
     const map = new window.kakao.maps.Map(mapRef.current, {
       center: new window.kakao.maps.LatLng(37.5665, 126.978),
       level: 7,
+      maxLevel: 8,
+    });
+    window.kakao.maps.event.addListener(map, 'center_changed', () => {
+      const c = map.getCenter();
+      const lat = Math.min(Math.max(c.getLat(), SEOUL_BOUNDS.sw.lat), SEOUL_BOUNDS.ne.lat);
+      const lng = Math.min(Math.max(c.getLng(), SEOUL_BOUNDS.sw.lng), SEOUL_BOUNDS.ne.lng);
+      if (lat !== c.getLat() || lng !== c.getLng()) {
+        map.setCenter(new window.kakao.maps.LatLng(lat, lng));
+      }
     });
     mapInstanceRef.current = map;
     setMapReady(true);
