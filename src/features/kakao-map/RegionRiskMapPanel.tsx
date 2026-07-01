@@ -81,6 +81,41 @@ interface Manhole {
   waterLevel: number;
 }
 
+const isPointInPolygon = (
+  latitude: number,
+  longitude: number,
+  path: Array<{ lat: number; lng: number }>,
+) => {
+  let isInside = false;
+
+  for (
+    let current = 0, previous = path.length - 1;
+    current < path.length;
+    previous = current++
+  ) {
+    const currentPoint = path[current];
+    const previousPoint = path[previous];
+    const crossesLatitude =
+      currentPoint.lat > latitude !== previousPoint.lat > latitude;
+    const intersectionLongitude =
+      ((previousPoint.lng - currentPoint.lng) *
+        (latitude - currentPoint.lat)) /
+        (previousPoint.lat - currentPoint.lat) +
+      currentPoint.lng;
+
+    if (crossesLatitude && longitude < intersectionLongitude) {
+      isInside = !isInside;
+    }
+  }
+
+  return isInside;
+};
+
+const isWithinSeoul = (latitude: number, longitude: number) =>
+  SEOUL_DISTRICT_BOUNDARIES.some((boundary) =>
+    boundary.paths.some((path) => isPointInPolygon(latitude, longitude, path)),
+  );
+
 interface RegionRiskMapPanelProps {
   className?: string;
   height?: string;
@@ -120,12 +155,14 @@ function useManholes(enabled: boolean) {
       if (!response.ok) throw new Error(SENSOR_API_ERROR_MESSAGE);
       const data = (await response.json()) as Manhole[];
 
-      return data.filter((manhole) => (
-          typeof manhole.latitude === 'number'
-          && typeof manhole.longitude === 'number'
-          && manhole.latitude !== 0
-          && manhole.longitude !== 0
-));
+      return data.filter(
+        (manhole) =>
+          typeof manhole.latitude === "number" &&
+          typeof manhole.longitude === "number" &&
+          manhole.latitude !== 0 &&
+          manhole.longitude !== 0 &&
+          isWithinSeoul(manhole.latitude, manhole.longitude),
+      );
     },
     enabled,
     staleTime: 30_000,
