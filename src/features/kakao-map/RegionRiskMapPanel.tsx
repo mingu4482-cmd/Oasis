@@ -9,7 +9,6 @@ import {
   Polyline,
   useKakaoLoader,
 } from "react-kakao-maps-sdk";
-import { useNavigate } from "react-router-dom";
 import { useSafeRouteStore } from "../safe-route/safeRouteStore";
 import {
   fetchRegionalStatus,
@@ -39,13 +38,6 @@ const RISK_MARKER_COLOR: Record<RiskLabel, string> = {
 const DATA_UNAVAILABLE_COLOR = "#94a3b8";
 const SENSOR_API_ERROR_MESSAGE = "외부 하수관로 센서 API에 연결할 수 없습니다.";
 
-const RISK_LABEL_KO: Record<RiskLabel, string> = {
-  SAFE: "안전",
-  CAUTION: "관심",
-  WARNING: "주의",
-  DANGER: "위험",
-};
-
 const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
   if (
     status?.riskLabel === "SAFE" ||
@@ -63,8 +55,6 @@ const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
   return "SAFE";
 };
 
-const formatNumber = (value: number | undefined, unit: string) =>
-  typeof value === "number" ? `${value}${unit}` : "-";
 const DISTRICT_BOUNDARY_MAP = new Map(
   SEOUL_DISTRICT_BOUNDARIES.map((boundary) => [boundary.name, boundary.paths]),
 );
@@ -76,45 +66,6 @@ interface Manhole {
   longitude: number;
   waterLevel: number;
 }
-
-const isPointInPolygon = (
-  latitude: number,
-  longitude: number,
-  path: Array<{ lat: number; lng: number }>,
-) => {
-  let isInside = false;
-
-  for (let current = 0, previous = path.length - 1; current < path.length; previous = current++) {
-    const currentPoint = path[current];
-    const previousPoint = path[previous];
-    const crossesLatitude = currentPoint.lat > latitude !== previousPoint.lat > latitude;
-    const intersectionLongitude =
-      ((previousPoint.lng - currentPoint.lng) * (latitude - currentPoint.lat)) /
-        (previousPoint.lat - currentPoint.lat) +
-      currentPoint.lng;
-
-    if (crossesLatitude && longitude < intersectionLongitude) {
-      isInside = !isInside;
-    }
-  }
-
-  return isInside;
-};
-
-const isWithinSeoul = (latitude: number, longitude: number) =>
-  SEOUL_DISTRICT_BOUNDARIES.some((boundary) =>
-    boundary.paths.some((path) => isPointInPolygon(latitude, longitude, path)),
-  );
-
-const formatForecastRainfall = (status?: LiveStatusResponse) => {
-  const values = [
-    status?.forecastRainfall1h,
-    status?.forecastRainfall2h,
-    status?.forecastRainfall3h,
-  ].filter((value): value is number => typeof value === "number");
-  if (!values.length) return "-";
-  return `${Math.max(...values)}mm`;
-};
 
 interface RegionRiskMapPanelProps {
   className?: string;
@@ -217,7 +168,6 @@ function RegionRiskMapContent({
   layerVisibility,
   mapControls,
 }: RegionRiskMapPanelProps & { isKakaoReady: boolean }) {
-  const navigate = useNavigate();
   const selectedRegion = useDashboardStore((state) => state.selectedRegion);
   const setSelectedRegion = useDashboardStore(
     (state) => state.setSelectedRegion,
@@ -276,9 +226,6 @@ function RegionRiskMapContent({
 
   const selectedRegionCenter = findRegionCoordinate(selectedRegion);
   const center = selectedRegionCenter;
-  const activeItemName = activeInfoRegion ?? selectedRegion;
-  const activeItem =
-    regionItems.find((item) => item.name === activeItemName) ?? null;
   const visibleManholes = useMemo(() => {
     if (!layers.waterLevel) return [];
     return manholes;
@@ -332,11 +279,6 @@ function RegionRiskMapContent({
 
   const selectRegion = (regionName: string) => {
     setSelectedRegion(regionName);
-  };
-
-  const openRiskAnalysis = (regionName: string) => {
-    selectRegion(regionName);
-    navigate(`/risk-analysis?region=${encodeURIComponent(regionName)}`);
   };
 
   if (!isKakaoReady) {
@@ -567,54 +509,6 @@ function RegionRiskMapContent({
           : null}
       </KakaoMap>
 
-      {activeItem && layers.regionalRisk ? (
-        <div
-          className="region-info-window region-info-floating"
-          onMouseEnter={() => setActiveInfoRegion(activeItem.name)}
-          onMouseLeave={() => setActiveInfoRegion(null)}
-        >
-          <div className="region-info-heading">
-            <strong>{activeItem.name}</strong>
-            <span style={{ background: activeItem.markerColor }}>
-              {RISK_LABEL_KO[activeItem.riskLabel]}
-            </span>
-          </div>
-          <div className="region-info-grid">
-            <span>위험도 점수</span>
-            <strong>{activeItem.status?.riskScore ?? 0}%</strong>
-            <span>위험도 등급</span>
-            <strong>{activeItem.riskLabel}</strong>
-            {layers.rainfall ? (
-              <>
-                <span>강우량</span>
-                <strong>
-                  {formatNumber(activeItem.status?.rainfall, "mm")}
-                </strong>
-              </>
-            ) : null}
-            {layers.waterLevel ? (
-              <>
-                <span>하수관로 수위</span>
-                <strong>
-                  {formatNumber(activeItem.status?.waterLevel, "%")}
-                </strong>
-              </>
-            ) : null}
-            <span>예보 강수량</span>
-            <strong>{formatForecastRainfall(activeItem.status)}</strong>
-          </div>
-          <div className="region-info-actions">
-            <button
-              type="button"
-              className="region-info-action"
-              onClick={() => openRiskAnalysis(activeItem.name)}
-            >
-              AI 상세 분석 보기
-            </button>
-          </div>
-        </div>
-      ) : null}
-
       {selectedManhole ? (
         <div className="region-info-window manhole-info-floating">
           <div className="region-info-heading">
@@ -684,92 +578,39 @@ function RegionRiskMapContent({
         <div className="dashboard-map-layer-toggle">{mapControls}</div>
       ) : null}
 
-      <div className="map-legend region-risk-legend">
-        {layers.regionalRisk ? (
-          <>
-            <strong>위험도</strong>
-            <span className="legend-item">
-              <span
-                className="legend-dot"
-                style={{ background: RISK_MARKER_COLOR.SAFE }}
-              />
-              안전
-            </span>
-            <span className="legend-item">
-              <span
-                className="legend-dot"
-                style={{ background: RISK_MARKER_COLOR.CAUTION }}
-              />
-              관심
-            </span>
-            <span className="legend-item">
-              <span
-                className="legend-dot"
-                style={{ background: RISK_MARKER_COLOR.WARNING }}
-              />
-              주의
-            </span>
-            <span className="legend-item">
-              <span
-                className="legend-dot"
-                style={{ background: RISK_MARKER_COLOR.DANGER }}
-              />
-              위험
-            </span>
-          </>
-        ) : null}
-        {layers.waterLevel ? (
-          <>
-            <strong>맨홀</strong>
-            <span className="legend-item">
-              <span className="legend-dot" style={{ background: "#16a34a" }} />
-              정상
-            </span>
-            <span className="legend-item">
-              <span className="legend-dot" style={{ background: "#eab308" }} />
-              주의
-            </span>
-            <span className="legend-item">
-              <span className="legend-dot" style={{ background: "#f97316" }} />
-              경계
-            </span>
-            <span className="legend-item">
-              <span className="legend-dot" style={{ background: "#dc2626" }} />
-              심각
-            </span>
-            <span className="legend-item">
-              <span className="legend-dot manhole-legend-dot" />
-              {visibleManholes.length}개
-            </span>
-          </>
-        ) : null}
-        {layers.safeRoute ? (
-          <>
-            <strong>대피소</strong>
-            <span className="legend-item">
-              <span
-                className="legend-dot"
-                style={{ background: SHELTER_STATUS_COLOR["운영 중"] }}
-              />
-              운영 중
-            </span>
-            <span className="legend-item">
-              <span
-                className="legend-dot"
-                style={{ background: SHELTER_STATUS_COLOR["대기"] }}
-              />
-              대기
-            </span>
-            <span className="legend-item">
-              <span
-                className="legend-dot"
-                style={{ background: SHELTER_STATUS_COLOR["만원"] }}
-              />
-              만원
-            </span>
-          </>
-        ) : null}
-      </div>
+      {layers.regionalRisk ? (
+        <div className="map-legend region-risk-legend">
+          <strong>위험도</strong>
+          <span className="legend-item">
+            <span
+              className="legend-dot"
+              style={{ background: RISK_MARKER_COLOR.SAFE }}
+            />
+            안전
+          </span>
+          <span className="legend-item">
+            <span
+              className="legend-dot"
+              style={{ background: RISK_MARKER_COLOR.CAUTION }}
+            />
+            관심
+          </span>
+          <span className="legend-item">
+            <span
+              className="legend-dot"
+              style={{ background: RISK_MARKER_COLOR.WARNING }}
+            />
+            주의
+          </span>
+          <span className="legend-item">
+            <span
+              className="legend-dot"
+              style={{ background: RISK_MARKER_COLOR.DANGER }}
+            />
+            위험
+          </span>
+        </div>
+      ) : null}
       {isFetching ? (
         <div className="region-map-error">데이터 갱신 중</div>
       ) : null}
