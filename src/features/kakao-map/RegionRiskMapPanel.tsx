@@ -67,6 +67,9 @@ interface Manhole {
   waterLevel: number;
 }
 
+const isWithinSeoul = (lat: number, lng: number) =>
+  lat >= 37.4 && lat <= 37.7 && lng >= 126.75 && lng <= 127.2;
+
 interface RegionRiskMapPanelProps {
   className?: string;
   height?: string;
