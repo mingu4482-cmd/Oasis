@@ -2,6 +2,8 @@ import express from 'express';
 import axios from 'axios';
 import { Pool } from 'pg';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.local' });
@@ -11,6 +13,7 @@ const app = express();
 const port = Number(process.env.API_PORT ?? 4000);
 const aiServerUrl = process.env.AI_SERVER_URL ?? 'http://localhost:8000';
 const vworldApiKey = (process.env.VWORLD_API_KEY ?? process.env.VITE_VWORLD_API_KEY ?? '').trim();
+const regionalStatusCachePath = path.resolve('ai-server', 'data', 'latest-regional-status.json');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -79,6 +82,7 @@ function toLiveStatus(payload) {
     hasData: true,
     targetAreaName: normalizedPayload.targetAreaName,
     rainfall: normalizedPayload.rainfall,
+    rainfallUnit: normalizedPayload.rainfallUnit ?? 'mm/10min',
     waterLevel: normalizedPayload.waterLevel,
     drainageLevel: normalizedPayload.drainageLevel,
     waterLevelRiseRate: normalizedPayload.waterLevelRiseRate,
@@ -127,6 +131,49 @@ function toRiskForecast(payload) {
     targetAreaName: normalizedPayload.targetAreaName,
   };
 }
+
+function applyRegionalStatus(payload, persist = true) {
+  latestRegionalStatus = {
+    hasData: true,
+    mode: 'regional',
+    defaultRegion: payload.defaultRegion,
+    regions: payload.regions ?? Object.keys(payload.regionStatusMap ?? {}),
+    regionStatusMap: payload.regionStatusMap ?? {},
+    timestamp: payload.timestamp ?? new Date().toISOString(),
+  };
+
+  const defaultStatus = getRegionalStatus(latestRegionalStatus.defaultRegion);
+  if (defaultStatus) {
+    latestLiveStatus = toLiveStatus(defaultStatus);
+    latestRiskForecast = toRiskForecast(defaultStatus);
+  }
+
+  if (persist) {
+    try {
+      mkdirSync(path.dirname(regionalStatusCachePath), { recursive: true });
+      const temporaryPath = `${regionalStatusCachePath}.tmp`;
+      writeFileSync(temporaryPath, JSON.stringify(latestRegionalStatus), 'utf8');
+      renameSync(temporaryPath, regionalStatusCachePath);
+    } catch (error) {
+      console.error('Failed to persist regional live status cache:', error.message);
+    }
+  }
+}
+
+function hydrateRegionalStatusCache() {
+  if (latestRegionalStatus || !existsSync(regionalStatusCachePath)) return;
+  try {
+    const cached = JSON.parse(readFileSync(regionalStatusCachePath, 'utf8'));
+    if (cached?.regionStatusMap && Object.keys(cached.regionStatusMap).length) {
+      applyRegionalStatus(cached, false);
+      console.log('Regional live status restored from cache:', cached.timestamp);
+    }
+  } catch (error) {
+    console.error('Failed to restore regional live status cache:', error.message);
+  }
+}
+
+hydrateRegionalStatusCache();
 
 function fallbackGeneratedAlert(payload, source = 'fallback') {
   const rules = {
@@ -428,13 +475,8 @@ app.post('/api/predict-risk', async (request, response) => {
 
 app.post('/api/generate-alert', async (request, response) => {
   try {
-    const riskLabel = request.body?.riskLabel;
     const dataStatus = request.body?.dataStatus;
     const source = String(request.body?.source ?? '').toLowerCase();
-    if (riskLabel !== 'WARNING' && riskLabel !== 'DANGER') {
-      response.json(fallbackGeneratedAlert(request.body, 'rule-based'));
-      return;
-    }
     if (dataStatus !== 'REALTIME' && dataStatus !== 'PARTIAL') {
       response.json(fallbackGeneratedAlert(request.body));
       return;
@@ -467,20 +509,7 @@ app.post('/api/update-live-status', (request, response) => {
     const payload = request.body;
 
     if (payload.mode === 'regional' && payload.regionStatusMap) {
-      latestRegionalStatus = {
-        hasData: true,
-        mode: 'regional',
-        defaultRegion: payload.defaultRegion,
-        regions: payload.regions ?? Object.keys(payload.regionStatusMap),
-        regionStatusMap: payload.regionStatusMap,
-        timestamp: payload.timestamp ?? new Date().toISOString(),
-      };
-
-      const defaultStatus = getRegionalStatus(payload.defaultRegion);
-      if (defaultStatus) {
-        latestLiveStatus = toLiveStatus(defaultStatus);
-        latestRiskForecast = toRiskForecast(defaultStatus);
-      }
+      applyRegionalStatus(payload);
 
       console.log('Regional live status updated from AI scheduler:', {
         defaultRegion: latestRegionalStatus.defaultRegion,
@@ -506,6 +535,7 @@ app.post('/api/update-live-status', (request, response) => {
 });
 
 app.get('/api/regions', (_request, response) => {
+  hydrateRegionalStatusCache();
   if (latestRegionalStatus) {
     response.json({
       hasData: true,
@@ -525,6 +555,7 @@ app.get('/api/regions', (_request, response) => {
 });
 
 app.get('/api/regional-status', (_request, response) => {
+  hydrateRegionalStatusCache();
   if (latestRegionalStatus?.regionStatusMap) {
     const regionStatusMap = Object.fromEntries(
       Object.entries(latestRegionalStatus.regionStatusMap).map(([region, status]) => [region, toLiveStatus(status)]),
@@ -547,6 +578,7 @@ app.get('/api/regional-status', (_request, response) => {
 });
 
 app.get('/api/live-status', (request, response, next) => {
+  hydrateRegionalStatusCache();
   const region = request.query.region?.toString();
   const regionalStatus = getRegionalStatus(region);
 
@@ -570,6 +602,7 @@ app.get('/api/live-status', (request, response, next) => {
 });
 
 app.get('/api/risk-forecast', (request, response, next) => {
+  hydrateRegionalStatusCache();
   const region = request.query.region?.toString();
   const regionalStatus = getRegionalStatus(region);
 

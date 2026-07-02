@@ -44,9 +44,9 @@ const getSeverityLabel = (score = 0) => {
 };
 
 const getSeverityClassName = (score = 0) => {
-  if (score >= 80) return 'danger';
-  if (score >= 60) return 'warning';
-  if (score >= 40) return 'watch';
+  if (score >= 75) return 'danger';
+  if (score >= 50) return 'warning';
+  if (score >= 25) return 'watch';
   return 'normal';
 };
 
@@ -60,7 +60,7 @@ export function MapViewPage() {
     queryKey: ['regional-status'],
     queryFn: fetchRegionalStatus,
     staleTime: 30_000,
-    refetchInterval: 30_000,
+    refetchInterval: (query) => query.state.data?.hasData ? 30_000 : 2_000,
   });
   const selectedStatus = regionalStatusQuery.data?.regionStatusMap?.[selectedRegion];
   const riskScore = selectedStatus?.riskScore ?? 0;

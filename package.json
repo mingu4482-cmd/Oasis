@@ -7,7 +7,7 @@
     "api": "node server/index.js",
     "dev": "vite --host 0.0.0.0",
     "dev:fe": "vite --host 0.0.0.0",
-    "dev:be": "node server/index.js",
+    "dev:be": "node --watch server/index.js",
     "dev:ai": "cd ai-server && .\\.venv\\Scripts\\python.exe -m uvicorn main:app --port 8000",
     "dev:scheduler": "cd ai-server && set PYTHONIOENCODING=utf-8&& .\\.venv\\Scripts\\python.exe scheduler.py",
     "dev:all": "concurrently --names \"dev:fe,dev:be,dev:ai,dev:scheduler\" \"npm.cmd run dev:fe\" \"npm.cmd run dev:be\" \"npm.cmd run dev:ai\" \"npm.cmd run dev:scheduler\"",

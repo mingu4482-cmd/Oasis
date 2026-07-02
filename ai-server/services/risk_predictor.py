@@ -1,112 +1,107 @@
 from datetime import datetime
 from typing import Any
 
-import pandas as pd
-
 from schemas.risk_schema import (
     PredictionPoint,
-    RiskPredictionResponse,
     RiskForecastRequest,
     RiskForecastResponse,
+    RiskPredictionResponse,
     SensorData,
 )
-from services.feature_builder import build_model_features, build_sensor_data, clamp
+from services.feature_builder import build_sensor_data, clamp
 
 
-MODEL_VERSION = "OASIS-FloodNet v1.0"
-MODEL_CLASS_SCORES = {
-    0: 20,
-    1: 50,
-    2: 70,
-    3: 90,
-}
+MODEL_VERSION = "OASIS-RiskRule v2.0"
 
-LOW_RISK_MESSAGE = "강우량과 수위가 낮아 현재 침수 위험은 낮은 상태입니다."
-LOW_CONFIDENCE_SAFE_MESSAGE = "예보 데이터가 부족하지만 현재 강우량과 수위가 낮아 즉시 위험은 낮습니다."
+# OASIS 운영 기준 v2.0
+# - rainfall: 서울시 RN_10M(mm/10분)을 시간당 강우강도로 환산
+# - water level: 관측 수위 / 관측소 위험수위의 백분율
+# - rise rate: m/h
+# - forecast rainfall: 향후 3시간 시간별 강우량의 합(mm)
+WEIGHT_CURRENT_RAINFALL = 0.30
+WEIGHT_WATER_LEVEL = 0.35
+WEIGHT_LEVEL_RISE = 0.20
+WEIGHT_FORECAST_RAINFALL = 0.15
+
+HEAVY_RAINFALL_MM_PER_HOUR = 50.0
+EXTREME_RAINFALL_MM_PER_HOUR = 72.0
+THREE_HOUR_RAINFALL_MM = 90.0
+WARNING_WATER_LEVEL_PERCENT = 80.0
+DANGER_WATER_LEVEL_PERCENT = 90.0
+RAPID_LEVEL_RISE_M_PER_HOUR = 0.30
 
 
 def classify_risk(score: float) -> str:
-    if score >= 80:
+    if score >= 75:
         return "DANGER"
-    if score >= 60:
+    if score >= 50:
         return "WARNING"
-    if score >= 40:
+    if score >= 25:
         return "CAUTION"
     return "SAFE"
 
 
-def fallback_score(sensor_data: SensorData, drainage_level: float = 100.0) -> int:
-    drainage_risk = max(0.0, 100.0 - drainage_level)
-    score = (
-        sensor_data.current_rainfall * 0.65
-        + sensor_data.current_level * 0.45
-        + drainage_risk * 0.35
-        + sensor_data.level_velocity * 4.0
-        + sensor_data.forecast_rainfall * 0.45
+def normalized_percent(value: float, danger_value: float) -> float:
+    if danger_value <= 0:
+        return 0.0
+    return clamp(value / danger_value * 100.0)
+
+
+def calculate_rule_score(
+    sensor_data: SensorData,
+    *,
+    rainfall_rate_mm_per_hour: float | None = None,
+) -> int:
+    """Calculate the documented OASIS v2 reference-risk score.
+
+    Direct /predict callers provide current_rainfall in mm/h. The regional
+    scheduler explicitly supplies the hourly rate converted from RN_10M.
+    """
+    rainfall_rate = (
+        sensor_data.current_rainfall
+        if rainfall_rate_mm_per_hour is None
+        else rainfall_rate_mm_per_hour
     )
-    return round(clamp(score))
+    forecast_total = max(sensor_data.forecast_rainfall, 0.0)
 
-
-def is_low_observed_risk(payload: RiskForecastRequest) -> bool:
-    return (
-        payload.rainfall < 1
-        and payload.waterLevel < 30
-        and payload.forecastRainfall1h < 10
-        and payload.forecastRainfall2h < 10
-        and payload.forecastRainfall3h < 10
-        and payload.waterLevelRiseRate < 1
+    weighted_score = (
+        normalized_percent(rainfall_rate, HEAVY_RAINFALL_MM_PER_HOUR)
+        * WEIGHT_CURRENT_RAINFALL
+        + clamp(sensor_data.current_level)
+        * WEIGHT_WATER_LEVEL
+        + normalized_percent(sensor_data.level_velocity, RAPID_LEVEL_RISE_M_PER_HOUR)
+        * WEIGHT_LEVEL_RISE
+        + normalized_percent(forecast_total, THREE_HOUR_RAINFALL_MM)
+        * WEIGHT_FORECAST_RAINFALL
     )
+    score = round(clamp(weighted_score))
+
+    # A critical single signal must not be diluted by the weighted average.
+    if (
+        sensor_data.current_level >= DANGER_WATER_LEVEL_PERCENT
+        or rainfall_rate >= EXTREME_RAINFALL_MM_PER_HOUR
+        or sensor_data.level_velocity >= RAPID_LEVEL_RISE_M_PER_HOUR
+        or forecast_total >= THREE_HOUR_RAINFALL_MM
+    ):
+        return max(score, 75)
+    if sensor_data.current_level >= WARNING_WATER_LEVEL_PERCENT:
+        return max(score, 50)
+    if rainfall_rate >= HEAVY_RAINFALL_MM_PER_HOUR:
+        return max(score, 50)
+    return score
 
 
-def has_low_risk_override_blocker(payload: RiskForecastRequest) -> bool:
-    return (
-        payload.waterLevel >= 60
-        or payload.waterLevelRiseRate >= 3
-        or payload.forecastRainfall1h >= 30
-        or payload.forecastRainfall2h >= 30
-        or payload.forecastRainfall3h >= 30
-    )
-
-
-def is_low_risk_with_untrusted_forecast(payload: RiskForecastRequest) -> bool:
-    source = (payload.source or "").lower()
-    return (
-        payload.rainfall < 1
-        and payload.waterLevel < 40
-        and payload.waterLevelRiseRate <= 0
-        and (payload.forecastStatus == "FAILED" or "fallback" in source)
-    )
-
-
-def has_safety_override_blocker(payload: RiskForecastRequest) -> bool:
-    return (
-        payload.waterLevel >= 60
-        or payload.waterLevelRiseRate >= 3
-        or payload.rainfall >= 20
-        or payload.forecastRainfall1h >= 30
-        or payload.forecastRainfall2h >= 30
-        or payload.forecastRainfall3h >= 30
-    )
-
-
-def predict_sensor_risk(sensor_data: SensorData, model: Any | None = None, drainage_level: float = 100.0) -> RiskPredictionResponse:
-    formula_score = fallback_score(sensor_data, drainage_level)
-    score = formula_score
-    risk_level = -1
-
-    if model is not None:
-        try:
-            features = pd.DataFrame([build_model_features(sensor_data)])
-            risk_level = int(model.predict(features)[0])
-            model_score = MODEL_CLASS_SCORES.get(risk_level, formula_score)
-            blended_score = round(clamp((formula_score * 0.75) + (model_score * 0.25)))
-            score = max(formula_score, blended_score)
-        except Exception:
-            risk_level = -1
-            score = formula_score
-
+def predict_sensor_risk(
+    sensor_data: SensorData,
+    model: Any | None = None,
+    drainage_level: float = 100.0,
+) -> RiskPredictionResponse:
+    # model and drainage_level are retained for API compatibility. The public
+    # score now follows one transparent rule set instead of synthetic ML data.
+    del model, drainage_level
+    score = calculate_rule_score(sensor_data)
     return RiskPredictionResponse(
-        riskLevel=risk_level,
+        riskLevel={"SAFE": 0, "CAUTION": 1, "WARNING": 2, "DANGER": 3}[classify_risk(score)],
         riskLabel=classify_risk(score),
         riskScore=score,
     )
@@ -114,84 +109,59 @@ def predict_sensor_risk(sensor_data: SensorData, model: Any | None = None, drain
 
 def build_reasons(payload: RiskForecastRequest, risk_score: int) -> list[str]:
     reasons: list[str] = []
-    if payload.rainfall >= 30:
-        reasons.append("최근 강수량이 높습니다.")
-    if max(payload.forecastRainfall1h, payload.forecastRainfall2h, payload.forecastRainfall3h) >= 35:
-        reasons.append("단기 예보 강수량이 높아 추가 유입이 예상됩니다.")
-    if payload.waterLevel >= 70:
-        reasons.append("하수관로 수위가 위험 기준에 근접했습니다.")
-    if payload.drainageLevel <= 70:
-        reasons.append("배수 상태가 낮아 침수 지연 배출 가능성이 있습니다.")
-    if payload.waterLevelRiseRate >= 3:
-        reasons.append("수위 상승 속도가 빠릅니다.")
+    rainfall_rate = payload.rainfall * 6.0
+    forecast_total = payload.forecastRainfall1h + payload.forecastRainfall2h + payload.forecastRainfall3h
+
+    if rainfall_rate >= EXTREME_RAINFALL_MM_PER_HOUR:
+        reasons.append("10분 강우량을 환산한 시간당 강우강도가 극한호우 기준에 도달했습니다.")
+    elif rainfall_rate >= HEAVY_RAINFALL_MM_PER_HOUR:
+        reasons.append("10분 강우량을 환산한 시간당 강우강도가 50mm 이상입니다.")
+    if payload.waterLevel >= DANGER_WATER_LEVEL_PERCENT:
+        reasons.append("하수관로 수위가 관측소 위험수위의 90% 이상입니다.")
+    elif payload.waterLevel >= WARNING_WATER_LEVEL_PERCENT:
+        reasons.append("하수관로 수위가 관측소 위험수위의 80% 이상입니다.")
+    if payload.waterLevelRiseRate >= RAPID_LEVEL_RISE_M_PER_HOUR:
+        reasons.append("하수관로 수위가 시간당 0.30m 이상 빠르게 상승하고 있습니다.")
+    if forecast_total >= THREE_HOUR_RAINFALL_MM:
+        reasons.append("향후 3시간 예상 강우량 합계가 90mm 이상입니다.")
     if not reasons:
-        reasons.append("현재 입력값 기준으로 즉각적인 고위험 요인은 제한적입니다.")
-    if risk_score >= 80 and len(reasons) < 3:
-        reasons.append("복합 요인으로 종합 위험도가 높게 산정되었습니다.")
+        reasons.append("현재 강우·관로 수위·수위 상승속도·3시간 예보를 종합한 참고 위험도입니다.")
+    if risk_score >= 75 and len(reasons) < 2:
+        reasons.append("단일 고위험 지표가 가중평균에 희석되지 않도록 위험 단계를 강제 상향했습니다.")
     return reasons
 
 
 def build_risk_forecast(payload: RiskForecastRequest, model: Any | None = None) -> RiskForecastResponse:
+    del model
     points: list[PredictionPoint] = []
     scores: list[int] = []
 
     for hour in range(4):
         sensor_data = build_sensor_data(payload, hour)
-        prediction = predict_sensor_risk(sensor_data, model, payload.drainageLevel)
-        scores.append(prediction.riskScore)
+        # RN_10M is converted only for the current observation. KMA forecast
+        # values for +1h through +3h are already hourly precipitation amounts.
+        rainfall_rate = payload.rainfall * 6.0 if hour == 0 else sensor_data.current_rainfall
+        score = calculate_rule_score(sensor_data, rainfall_rate_mm_per_hour=rainfall_rate)
+        label = classify_risk(score)
+        scores.append(score)
         points.append(
             PredictionPoint(
                 time="Now" if hour == 0 else f"+{hour}h",
-                risk=prediction.riskScore,
+                risk=score,
                 rainfall=sensor_data.current_rainfall,
-                riskLabel=prediction.riskLabel,
+                riskLabel=label,
             )
         )
 
-    low_risk_override = is_low_observed_risk(payload) and not has_low_risk_override_blocker(payload)
-    untrusted_forecast_low_risk = is_low_risk_with_untrusted_forecast(payload) and not has_safety_override_blocker(payload)
-    if low_risk_override:
-        points = [
-            PredictionPoint(
-                time=point.time,
-                risk=min(point.risk, 25),
-                rainfall=point.rainfall,
-                riskLabel="SAFE",
-            )
-            for point in points
-        ]
-        scores = [point.risk for point in points]
-    elif untrusted_forecast_low_risk:
-        points = [
-            PredictionPoint(
-                time=point.time,
-                risk=min(point.risk, 30),
-                rainfall=point.rainfall,
-                riskLabel="SAFE" if min(point.risk, 30) < 25 else "CAUTION",
-            )
-            for point in points
-        ]
-        scores = [point.risk for point in points]
-
     risk_score = max(scores)
-    if low_risk_override:
-        risk_label = "SAFE"
-        message = LOW_RISK_MESSAGE
-    elif untrusted_forecast_low_risk:
-        risk_label = "SAFE" if risk_score < 25 else "CAUTION"
-        message = LOW_CONFIDENCE_SAFE_MESSAGE
-    else:
-        risk_label = classify_risk(risk_score)
-        message = None
-    confidence = round(min(0.95, 0.62 + risk_score / 300), 2)
-
     return RiskForecastResponse(
         modelVersion=MODEL_VERSION,
-        confidence=confidence,
+        # The scheduler replaces this with collection-quality confidence.
+        confidence=0.0,
         riskScore=risk_score,
-        riskLabel=risk_label,
-        reasons=[message] if message else build_reasons(payload, risk_score),
-        message=message,
+        riskLabel=classify_risk(risk_score),
+        reasons=build_reasons(payload, risk_score),
+        message="OASIS 참고 위험도이며 공식 재난 경보가 아닙니다.",
         points=points,
         timestamp=datetime.now().isoformat(),
     )

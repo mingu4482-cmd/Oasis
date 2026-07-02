@@ -66,7 +66,7 @@ def build_prompt(payload: GenerateAlertRequest) -> str:
         f"입력 데이터:\n{payload.model_dump_json(ensure_ascii=False)}\n\n"
         "반환 JSON schema:\n"
         '{"alertLevel": string, "targetGroup": string[], "title": string, '
-        '"message": string, "actions": string[], "createdAt": string, "source": "openai"}'
+        '"message": string, "actions": string[], "source": "openai"}'
     )
 
 
@@ -96,7 +96,7 @@ def normalize_openai_alert(data: dict[str, Any]) -> GenerateAlertResponse:
         title=str(data.get("title", "")).strip() or "침수 위험 알림",
         message=str(data.get("message", "")).strip() or "침수 위험 상태를 확인하세요.",
         actions=[str(item) for item in data.get("actions", []) if str(item).strip()] or ["상황 모니터링"],
-        createdAt=str(data.get("createdAt", "")).strip() or datetime.now().isoformat(),
+        createdAt=datetime.now().isoformat(),
         source="openai",
     )
 

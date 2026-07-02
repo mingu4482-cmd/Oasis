@@ -1,85 +1,39 @@
 # OASIS 프로젝트 구조
 
-OASIS는 공공 API 기반 침수 위험도 수집, AI 예측, 상황별 알림 생성, 지도/대피 경로 화면을 제공하는 React + Express + FastAPI + Spring Boot 프로젝트입니다. 실제 앱 루트는 `C:\dev_source\Oasis\Oasis`입니다.
+이 문서는 `C:\dev_source\Oasis\Oasis`의 현재 코드 구조를 설명합니다.
 
-## 루트 파일
-
-- `.env.local`: Express 서버, DB, 카카오 지도, 외부 센서/SWMM, 선택적 경로 API 환경 변수
-- `.env.local.example`: 로컬 개발용 환경 변수 템플릿
-- `.editorconfig`: UTF-8, CRLF 등 편집기 기본 설정
-- `.gitignore`: Git 추적 제외 설정
-- `HELP.md`: Spring Initializr가 생성한 참고 문서
-- `index.html`: Vite SPA 진입 HTML, 브라우저 제목은 `OASIS`
-- `locations_insert.sql`: 대피소/위치 데이터 적재용 SQL
-- `package.json`: npm 의존성 및 개발 스크립트
-- `package-lock.json`: npm 의존성 잠금 파일
-- `README.md`: 설치, 실행, API 사용 안내
-- `structure.md`: 현재 프로젝트 구조 문서
-- `tsconfig.json`: TypeScript 설정
-- `vite.config.ts`: Vite 설정, `/api` Express 프록시, `/vworld-api` 프록시, Cesium 정적 자산 접근 설정
-
-## 실행 스크립트
-
-- `api`: `node server/index.js`
-- `dev`: Vite 개발 서버
-- `dev:fe`: Vite 개발 서버
-- `dev:be`: Express API 서버
-- `dev:ai`: FastAPI AI 서버
-- `dev:scheduler`: Python 스케줄러
-- `dev:all`: `concurrently`로 프론트엔드, Express, FastAPI, 스케줄러 동시 실행
-- `build`: TypeScript 검사 후 Vite production build
-- `preview`: Vite preview 서버 실행
-
-## 디렉터리 개요
+## 전체 구조
 
 ```text
 Oasis/
-├─ ai-server/
-│  ├─ models/
-│  │  └─ risk_model.pkl
+├─ ai-server/                  # FastAPI, 위험도 규칙, OpenAI 알림, 수집 스케줄러
+│  ├─ main.py
+│  ├─ scheduler.py
 │  ├─ schemas/
 │  │  └─ risk_schema.py
 │  ├─ services/
-│  │  ├─ alert_generator.py
 │  │  ├─ feature_builder.py
-│  │  └─ risk_predictor.py
-│  ├─ .env.example
-│  ├─ main.py
+│  │  ├─ risk_predictor.py
+│  │  └─ alert_generator.py
+│  ├─ data/                    # 최신 지역 위험도 런타임 캐시(ignored)
+│  ├─ models/                  # 레거시 실험 모델 파일
+│  ├─ train.py                 # 레거시 모델 생성 스크립트
 │  ├─ requirements.txt
-│  ├─ scheduler.py
-│  └─ train.py
-├─ oasis_spring/
-│  ├─ gradle/wrapper/
-│  ├─ src/main/java/com/smu/backend/
-│  │  ├─ controller/
-│  │  ├─ dto/
-│  │  ├─ mapper/
-│  │  └─ service/
-│  ├─ src/main/resources/
-│  │  ├─ mapper/
-│  │  └─ application.yml
-│  ├─ build.gradle
-│  ├─ gradlew
-│  ├─ gradlew.bat
-│  └─ settings.gradle
+│  └─ .env.example
+├─ oasis_spring/               # 별도 Git 저장소인 Spring 센서 백엔드
 ├─ server/
-│  └─ index.js
+│  └─ index.js                 # Express API 게이트웨이
 ├─ public/
-│  └─ Cesium/
-├─ scripts/
-│  └─ import_locations.py
-├─ sim/
-│  └─ swmm_server.py
+├─ sim/                        # 레거시 SWMM 목 서버
 ├─ src/
 │  ├─ app/
 │  ├─ assets/
 │  ├─ features/
 │  ├─ pages/
-│  ├─ shared/
-│  ├─ main.tsx
-│  └─ vite-env.d.ts
+│  └─ shared/
+├─ .env.local.example
+├─ .gitignore
 ├─ index.html
-├─ locations_insert.sql
 ├─ package.json
 ├─ README.md
 ├─ structure.md
@@ -87,325 +41,268 @@ Oasis/
 └─ vite.config.ts
 ```
 
+## 런타임 구성
+
+```text
+브라우저 :5173
+   │
+   ├─ /api ─────────────── Express :4000
+   │                          ├─ FastAPI :8000
+   │                          ├─ PostgreSQL
+   │                          ├─ Kakao/VWorld API
+   │                          └─ 지역 위험도 메모리·파일 캐시
+   │
+   └─ 맨홀 API ─────────── Spring Boot :8080
+
+Python Scheduler
+   ├─ 서울시 강우량 API
+   ├─ 서울시 하수관로 API
+   ├─ 기상청 단기예보 API
+   └─ Express /api/update-live-status
+```
+
+## 루트 파일
+
+- `package.json`: Vite, Express, FastAPI, Scheduler 통합 실행 스크립트
+- `vite.config.ts`: React 빌드와 `/api` Express 프록시
+- `index.html`: React 진입 HTML과 Cesium 기본 경로 설정
+- `.env.local`: Express, DB, 지도와 외부 API 런타임 설정
+- `.gitignore`: 비밀 파일, 빌드 결과, Python 캐시, 위험도 런타임 캐시 제외
+- `README.md`: 설치·실행·운영 기준
+- `structure.md`: 코드 구조와 데이터 흐름
+
+## 실행 스크립트
+
+| 스크립트 | 역할 |
+| --- | --- |
+| `npm.cmd run dev:all` | FE, Express, FastAPI, Scheduler 동시 실행 |
+| `npm.cmd run dev:fe` | Vite 개발 서버 |
+| `npm.cmd run dev:be` | `node --watch` Express 서버 |
+| `npm.cmd run dev:ai` | FastAPI 8000 |
+| `npm.cmd run dev:scheduler` | 공공 API 수집 스케줄러 |
+| `npm.cmd run build` | TypeScript 검사와 Vite 빌드 |
+
+Spring은 `oasis_spring/gradlew.bat bootRun`으로 별도 실행합니다.
+
 ## ai-server
 
-FastAPI AI 서버와 Python 스케줄러가 있는 영역입니다.
+### `main.py`
 
-- `main.py`
-  - `.env` 로드
-  - `models/risk_model.pkl` 로드
-  - `GET /health`
-  - `POST /predict`
-  - `POST /generate-alert`
-- `scheduler.py`
-  - 서울시 강우량 API 수집
-  - 서울시 하수관로 수위 API 수집
-  - 기상청 단기예보 API 수집
-  - 지역별 수위 상승 속도 및 위험도 payload 생성
-  - Express `POST /api/update-live-status`로 전송
-  - 기상청 격자 호출 간격, 429 cooldown, 동일 발표 시각 cache 적용
-  - `SCHEDULER_LOCK_PORT`로 중복 스케줄러 실행 차단
-- `schemas/risk_schema.py`
-  - 위험도 예측 요청/응답 타입
-  - 예측 시계열 타입
-  - 상황별 알림 요청/응답 타입
-- `services/risk_predictor.py`
-  - 모델 기반 예측
-  - fallback scoring
-  - `SAFE`, `CAUTION`, `WARNING`, `DANGER` 분류
-- `services/feature_builder.py`
-  - 모델 입력 feature 생성
-  - 예측 시계열용 센서 데이터 생성
-- `services/alert_generator.py`
-  - `OPENAI_API_KEY`, `OPENAI_MODEL` 기반 LLM 알림 생성
-  - OpenAI 실패 또는 키 없음 시 rule 기반 fallback 알림 생성
-- `train.py`
-  - 테스트용 `risk_model.pkl` 생성 스크립트
-- `.env.example`
-  - 서울시, 기상청, Express 전송, OpenAI 알림 설정 예시
+- FastAPI 애플리케이션
+- `GET /health`
+- `POST /predict`: 투명한 위험도 규칙 호출
+- `POST /generate-alert`: OpenAI 상황별 알림 생성
+- 런타임 Random Forest 모델을 로드하지 않음
 
-## oasis_spring
+### `services/risk_predictor.py`
 
-Spring Boot 기반 센서/SWMM 백엔드입니다.
+- `OASIS-RiskRule v2.0`
+- SAFE/CAUTION/WARNING/DANGER 분류
+- 강우, 관로 수위, 상승속도, 예보 강우 가중치 계산
+- 단일 고위험 신호의 강제 승격
+- 현재부터 3시간 후까지의 포인트 생성
 
-- `build.gradle`
-  - Spring Boot 3.5.15
-  - Java 21 toolchain
-  - Spring Web, MyBatis, PostgreSQL, Lombok 의존성
-- `src/main/resources/application.yml`
-  - PostgreSQL datasource
-  - HikariCP connection pool
-  - MyBatis mapper 경로와 snake_case to camelCase 설정
-  - 실제 DB 비밀 값이 들어갈 수 있으므로 커밋 전 분리 또는 마스킹 필요
-- `BackendApplication.java`
-  - Spring Boot 애플리케이션 진입점
-- `controller/ManholeController.java`
-  - `GET /api/manholes`
-  - `locations`와 최신 `sensor_logs`를 조인한 맨홀 좌표/수위 목록 반환
-- `controller/SensorLogController.java`
-  - `GET /api/sensors/latest`
-  - 지역별 최신 센서 로그 반환
-- `controller/TestController.java`
-  - `GET /api/test/swmm?rainfall=...`
-  - Python SWMM 목 서버의 `POST /run-swmm` 호출 결과 반환
-- `controller/GeoUpdateController.java`
-  - `GET /api/geo-update`
-  - `locations` 주소를 카카오 로컬 검색으로 좌표 변환 후 DB 업데이트
-- `service/SeoulWaterLevelService.java`
-  - Spring 시작 시 1회, 이후 10분마다 서울시 하수관로 수위 API 수집
-  - 신규 센서를 `locations`에 등록하고 `sensor_logs`에 수위 저장
-- `service/KakaoGeoService.java`
-  - 카카오 로컬 검색 API로 주소를 위도/경도 좌표로 변환
-- `service/SwmmService.java`
-  - `http://localhost:8000/run-swmm` Python SWMM 목 서버 호출
-- `mapper/SensorLogMapper.java`, `resources/mapper/SensorLogMapper.xml`
-  - `locations`, `sensor_logs` 조회/삽입/좌표 업데이트 SQL
-- `dto/SensorLogDTO.java`
-  - 센서 로그, 맨홀 이름, 위도/경도, 수위 응답 DTO
+### `services/feature_builder.py`
+
+- 지역 상태 요청을 현재/+1h/+2h/+3h 센서 특징으로 변환
+- 예상 수위와 남은 예보 강우량 생성
+
+### `services/alert_generator.py`
+
+- 계산된 위험점수는 변경하지 않고 알림 문구만 생성
+- REALTIME/PARTIAL 모든 위험 단계에서 OpenAI 사용
+- 키 누락, API 실패, JSON 오류 시 규칙 기반 fallback
+- 생성 시각은 모델 응답이 아니라 서버 현재 시각 사용
+
+### `scheduler.py`
+
+- 서울시 10분 강우량 수집
+- 서울시 25개 구 하수관로 조회
+- 기상청 격자별 단기예보 조회
+- 하수관·기상청 요청 병렬화
+- 지역별 위험도 계산 후 Express에 전송
+- APScheduler 10분 주기와 UDP 기반 중복 실행 잠금
+- Windows UTF-8 출력 설정
+
+### 레거시 파일
+
+- `train.py`, `models/risk_model.pkl`: 과거 실험용 Random Forest 자산
+- 현재 실시간 위험도 산정에는 사용하지 않음
 
 ## server
 
-Express API 게이트웨이입니다.
+### `server/index.js`
 
-- PostgreSQL 사용자 테이블 보장
-- PostgreSQL `locations` 테이블 기반 대피소 목록 제공
-- 회원가입, 로그인, 로그아웃 처리
-- FastAPI `/predict`를 `/api/predict-risk`로 프록시
-- FastAPI `/generate-alert`를 `/api/generate-alert`로 프록시
-- 스케줄러가 보낸 최신 지역별 상태를 메모리에 저장
-- `/api/regions`, `/api/regional-status`, `/api/live-status`, `/api/risk-forecast` 제공
-- `/api/shelters`로 대피소 목록 제공
-- 카카오모빌리티 자동차 경로와 T맵 도보 경로 API 제공
-- 도보 경로 API 키가 없으면 OSRM 또는 직선거리 fallback 반환
-- `GET /api/vworld/seoul-districts`로 VWorld 서울 자치구 경계 중계
-- VWorld 키 또는 upstream이 없으면 빈 경계를 정상 응답하여 지도 fallback 유지
+- Express API 게이트웨이
+- FastAPI `/predict`, `/generate-alert` 프록시
+- 스케줄러의 지역 상태 수신
+- 최신 지역 위험도를 메모리와 `ai-server/data/latest-regional-status.json`에 저장
+- 재시작 시 캐시 즉시 복원
+- PostgreSQL 회원가입·로그인
+- VWorld 서울 자치구 경계 프록시
+- Kakao 자동차 경로, 보행 경로, 대피소 API
 
-## public
+주요 상태:
 
-- `Cesium/`: VWorld WebGL/Cesium 시뮬레이션 화면에서 사용하는 정적 런타임 자산, Worker, Widget CSS
+- `latestRegionalStatus`: 자치구별 전체 상태
+- `latestLiveStatus`: 기본 지역 현재 상태
+- `latestRiskForecast`: 기본 지역 전망
 
-## scripts
+## oasis_spring
 
-- `import_locations.py`: 대피소/위치 데이터를 PostgreSQL `locations` 테이블에 적재하는 보조 스크립트
+Spring Boot 센서 백엔드이며 루트 저장소와 별도의 Git 상태를 가집니다.
 
-## sim
+### 주요 구성
 
-- `swmm_server.py`: 로컬 테스트용 FastAPI SWMM 목 서버. `POST /run-swmm`으로 강우량을 받아 가상 맨홀 수위를 반환합니다. 실제 화면의 `/simulation`은 현재 `VITE_SWMM_API_BASE_URL` 기준 `/api/test/swmm?rainfall=...`를 호출하므로, Java/Spring 또는 별도 SWMM 백엔드와 함께 사용할 수 있습니다.
+- `ManholeController`: `GET /api/manholes`
+- `SensorLogController`: 최신 센서 로그
+- `GeoUpdateController`: `GET /api/geo-update`
+- `SeoulWaterLevelService`: 서울시 하수관로 수집과 DB 적재
+- `KakaoGeoService`: 서울 한정 맨홀 좌표 검색
+- `SensorLogMapper.xml`: locations와 최신 sensor_logs 조인
+
+### 맨홀 좌표 보정
+
+- 시설명 앞에 `서울특별시`를 추가해 검색
+- 카카오 검색 결과 중 서울 경계 내부 좌표만 채택
+- 이미 정상인 좌표는 건너뛰고 잘못된 좌표만 업데이트
+
+### 레거시 SWMM
+
+- `GET /api/test/swmm?rainfall=...` 엔드포인트는 남아 있음
+- 현재 React 시뮬레이션 화면은 이 엔드포인트 대신 맨홀 API와 위험도 API를 사용
 
 ## src/app
 
-- `App.tsx`: 라우터를 렌더링하는 앱 루트
-- `providers.tsx`: React Query 등 전역 Provider 설정
-- `router.tsx`: 라우트 정의
+- `src/main.tsx`: React DOM 진입점
+- `App.tsx`: RouterProvider 렌더링
+- `router.tsx`: 현재 라우팅
+- `providers.tsx`: React Query 등 전역 provider
 
-라우트:
+### 라우팅
 
-| path | page |
+| URL | 컴포넌트/동작 |
 | --- | --- |
-| `/` | `/map`으로 redirect |
-| `/dashboard` | `DashboardPage` |
+| `/` | `/map` redirect |
 | `/map` | `MapViewPage` |
-| `/digital-twin` | `/dashboard`로 redirect |
 | `/risk-analysis` | `RiskAnalysisPage` |
+| `/simulation` | `SimulationPage` |
 | `/alerts` | `AlertCenterPage` |
 | `/reports` | `ReportsPage` |
-| `/safe-route` | `/dashboard`로 redirect |
-| `/simulation` | `SimulationPage` |
 | `/login` | `LoginPage` |
 | `/signup` | `SignupPage` |
+| `/dashboard`, `/digital-twin`, `/safe-route` | `/map` redirect |
 
 ## src/features
 
-- `alert-system/IncidentTimeline.tsx`: 최근 침수/경보 이벤트 타임라인
-- `flood-prediction/AiPredictionPanel.tsx`: 선택 지역 실시간 수집값과 AI 위험도 표시
-- `flood-prediction/RiskPredictionChart.tsx`: `/api/risk-forecast` 기반 위험도 차트
-- `flood-prediction/mockData.ts`: 센서/지도/이벤트 최소 fallback 데이터
-- `kakao-map/KakaoMapPanel.tsx`: 대시보드 지도형 요약 패널
-- `kakao-map/RegionRiskMapPanel.tsx`: VWorld 자치구 경계, 지역별 위험도, 맨홀, 대피소/경로 레이어를 통합한 카카오 지도. `selectedRegion`에 맞춰 맨홀과 대피소를 필터링하고 1~7레벨 줌을 허용
-- `safe-route/`
-  - `ShelterMapPanel.tsx`: `VITE_KAKAO_MAP_KEY`와 `useKakaoLoader` 기반 대피소 지도 패널, `/api/shelters` 데이터 표시
-  - `ShelterList.tsx`: 대피소 목록과 경로 안내 UI
-  - `safeRouteStore.ts`: 현재 위치, 대피소 선택, 경로 조회 상태
-  - `mockData.ts`: 대피소 fallback 데이터
-- `sensor-monitor/SensorStatusPanel.tsx`: 센서 상태 요약
+### `kakao-map/RegionRiskMapPanel.tsx`
+
+- 카카오 지도와 서울 범위 제한
+- 모니터링 지역 위험도 말풍선
+- 선택 지역·다중 지역 기준 맨홀 필터링
+- VWorld 경계가 없을 때 가장 가까운 자치구 중심으로 fallback 분류
+- 맨홀 단색 마커와 수위 상세 정보
+- 시뮬레이션의 지역별 위험도 override 지원
+- 대피소와 대피 경로 레이어
+
+### `flood-prediction/`
+
+- `AiPredictionPanel.tsx`: 실시간 위험도, 강우, 관로, 예보 UI
+- `RiskPredictionChart.tsx`: 현재~3시간 위험도 차트
+- 빈 상태에서는 지역 상태를 2초 간격으로 재조회
+
+### `safe-route/`
+
+- 대피소, 현재 위치, 반경 필터와 선택 경로 Zustand store
+- 통합 지도에서 자동차/보행 경로 표시
+
+### 기타
+
+- `alert-system/`: 이벤트 타임라인
+- `sensor-monitor/`: 센서 상태 패널
 
 ## src/pages
 
-- `Dashboard/DashboardPage.tsx`
-  - 주요 지표
-  - 주요 위험 지역 TOP 3
-  - `RegionRiskMapPanel` 기반 지역별 위험도 지도 요약
-  - 이벤트, 센서 요약
-- `RiskAnalysis/RiskAnalysisPage.tsx`
-  - 실시간 AI 위험도 패널
-  - 위험도 차트
-  - OpenAI 또는 fallback 기반 상황별 알림 카드
-- `MapView/MapViewPage.tsx`
-  - 선택 지역과 지도 레이어 토글
-  - 지역별 위험도, 하수관로 수위, 대피 경로 통합 레이어
-  - `VITE_EXTERNAL_SENSOR_API_BASE_URL`의 `/api/manholes` 데이터를 선택 자치구 기준으로 표시
-  - `selectedRegion`을 공유 store에 반영
-- `Simulation/SimulationPage.tsx`
-  - VWorld WebGL/Cesium 기반 침수 시뮬레이션 화면
-  - `VITE_SWMM_API_BASE_URL`의 `/api/test/swmm?rainfall=...` 호출
-  - 예상 강우량 슬라이더와 침수 구역 polygon 시각화
-- `AlertCenter/AlertCenterPage.tsx`
-  - 경보 관리 화면
-- `Reports/ReportsPage.tsx`
-  - 보고서 대기열 화면
-- `Login/LoginPage.tsx`, `Signup/SignupPage.tsx`
-  - 인증 화면
+### `MapView/MapViewPage.tsx`
+
+- 전체 화면 지도 관제
+- 선택 지역 위험도, 실시간 관측값과 단기예보
+- 지역 위험도·하수관로·대피 경로 레이어 토글
+- 빈 데이터 상태 2초 재조회, 정상 상태 30초 재조회
+
+### `RiskAnalysis/RiskAnalysisPage.tsx`
+
+- URL `region`과 전역 선택 지역 동기화
+- 지역 현재 위험도와 1~3시간 차트
+- REALTIME/PARTIAL 상태의 OpenAI 상황별 알림
+- 데이터 부족 시 분석 불가 표시
+
+### `Simulation/SimulationPage.tsx`
+
+- Spring 맨홀 API 실측 수위를 초기값으로 사용
+- 선택 지역의 맨홀만 지도에 표시
+- 맨홀 ID별 유입·배수 민감도로 더미 수위 누적
+- 자치구별 최대 수위와 별도 AI 위험도 요청
+- 지역별 위험도 말풍선과 최고 위험 지역 카드
+
+### 기타 페이지
+
+- `AlertCenterPage`: 경보 관리
+- `ReportsPage`: 보고서 관리
+- `LoginPage`, `SignupPage`: 인증
 
 ## src/shared
 
-- `api/client.ts`: Axios 기본 클라이언트, 기본 baseURL은 `/api`
-- `api/aiApi.ts`: 위험도 예측, 지역 상태, 위험도 차트, 상황별 알림 API
-- `api/authApi.ts`: 로그인, 회원가입, 로그아웃 API
-- `api/externalApi.ts`: 외부 맨홀 센서 API와 SWMM API 기본 주소 관리
-- `api/vworldApi.ts`: Express의 `/api/vworld/seoul-districts` 응답을 자치구 polygon으로 변환
-- `components/AppShell.tsx`: 상단바, 사이드바, 공통 레이아웃
-- `components/MetricTile.tsx`: 지표 카드
-- `components/RoleGuard.tsx`: 역할 기반 접근 제어
-- `hooks/useRealtimeClock.ts`: 실시간 시계 hook
-- `store/authStore.ts`: 인증 상태 저장
-- `store/dashboardStore.ts`: 선택 지역과 대시보드 fallback 상태
-- `constants/regionCoordinates.ts`: 서울 자치구 대표 좌표와 지역 선택 목록
-- `types/domain.ts`: 공통 도메인 타입
+### `api/`
 
-## 데이터 흐름
+- `client.ts`: Express `/api` Axios client
+- `aiApi.ts`: 위험도, 지역 상태, OpenAI 알림 API
+- `externalApi.ts`: Spring 센서 API 기본 주소
+- `vworldApi.ts`: VWorld 경계 응답 변환
+- `authApi.ts`: 인증 API
 
-```text
-서울시 강우량 API
-서울시 하수관로 수위 API
-기상청 단기예보 API
-        ↓
-ai-server/scheduler.py
-        ↓
-risk_predictor.py
-        ↓
-Express /api/update-live-status
-        ↓
-React
-  ├─ DashboardPage
-  ├─ RiskAnalysisPage
-  └─ RiskPredictionChart
-```
+### `store/`
 
-상황별 알림 흐름:
+- `dashboardStore.ts`: 전역 `selectedRegion`
+- `authStore.ts`: 인증 상태
+
+### `constants/regionCoordinates.ts`
+
+- 서울 25개 구 중심 좌표
+- 위험도 모니터링 대상 10개 구 목록
+- 지도와 시뮬레이션의 지역 좌표 lookup
+
+## 핵심 데이터 계약
+
+`selectedRegion`은 지도, 위험도 분석, URL deep link와 관측 패널의 공통 지역 계약입니다. 시뮬레이션은 별도의 `selectedRegions` 배열을 지도에 전달해 다중 지역을 지원합니다.
+
+지역 상태 주요 필드:
 
 ```text
-React RiskAnalysisPage
-        ↓
-Express /api/generate-alert
-        ↓
-FastAPI /generate-alert
-        ↓
-alert_generator.py
-  ├─ OpenAI API 사용 가능: source=openai
-  └─ 키 없음/실패: source=fallback
+rainfall, rainfallUnit
+waterLevel, drainageLevel, waterLevelRiseRate
+forecastRainfall1h/2h/3h, forecastStatus
+riskScore, riskLabel, confidence
+dataStatus, dataStatusMessage, source
+points, reasons, message, timestamp
 ```
 
-지도/경로 흐름:
+`dataStatus`:
 
-```text
-React MapViewPage / RegionRiskMapPanel
-        ↓
-VITE_KAKAO_MAP_KEY로 Kakao 지도 SDK 로드
-Express /api/vworld/seoul-districts로 서울 자치구 경계 조회
-        ↓
-Express /api/shelters, /api/route/car, /api/route/walk
-        ↓
-PostgreSQL locations / 카카오모빌리티 / T맵 API / OSRM fallback
+- `REALTIME`: 강우·관로·예보 모두 성공
+- `PARTIAL`: 일부 성공
+- `UNAVAILABLE`: 핵심 실측 부족
+- `FALLBACK`: fallback 상태
 
-selectedRegion 변경
-  ├─ 선택 구 경계의 맨홀만 표시
-  ├─ 선택 구 주소/경계의 대피소만 표시
-  └─ 다른 구에서 선택한 대피소와 활성 경로 초기화
+## 유지보수 검증
+
+```powershell
+npm.cmd run build
+node --check server/index.js
+python -m py_compile ai-server/main.py ai-server/scheduler.py ai-server/services/risk_predictor.py ai-server/services/alert_generator.py
+
+cd oasis_spring
+.\gradlew.bat build -x test
 ```
 
-통합 지도/시뮬레이션 흐름:
-
-```text
-React MapViewPage / SimulationPage
-        ↓
-Spring Boot 센서/SWMM 백엔드
-  ├─ MapViewPage: GET {VITE_EXTERNAL_SENSOR_API_BASE_URL}/api/manholes
-  └─ SimulationPage: GET {VITE_SWMM_API_BASE_URL}/api/test/swmm?rainfall=...
-        ↓
-PostgreSQL sensor_logs/locations 또는 Python SWMM 목 서버
-        ↓
-Kakao 지도 또는 VWorld/Cesium 화면
-```
-
-Spring 센서 수집 흐름:
-
-```text
-서울시 하수관로 수위 API
-        ↓
-oasis_spring SeoulWaterLevelService
-        ↓
-PostgreSQL locations / sensor_logs
-        ↓
-GET /api/manholes, GET /api/sensors/latest
-        ↓
-React MapViewPage
-```
-
-## 주요 환경 변수
-
-프로젝트 루트 `.env.local`:
-
-- `API_PORT`: Express 서버 포트
-- `AI_SERVER_URL`: FastAPI AI 서버 주소
-- `DATABASE_URL`: PostgreSQL 연결 문자열
-- `VITE_API_BASE_URL`: 프론트엔드 Axios 기본 API 주소, 기본값 `/api`
-- `VITE_KAKAO_MAP_KEY`: 브라우저에서 사용하는 카카오 지도 JavaScript 키
-- `VITE_EXTERNAL_SENSOR_API_BASE_URL`: MapView/DigitalTwin 맨홀 센서 API 기본 주소, 기본값 `http://localhost:8080`
-- `VITE_SWMM_API_BASE_URL`: Simulation SWMM 테스트 API 기본 주소, 기본값 `http://localhost:8080`
-- `KAKAO_REST_API_KEY`: Express 서버에서 사용하는 카카오모빌리티 REST API 키
-- `TMAP_APP_KEY`: Express 서버에서 사용하는 T맵 보행자 경로 API 키
-- `VWORLD_API_KEY`, `VWORLD_DOMAIN`: Express 서버의 서울 자치구 경계 조회 설정
-
-`ai-server/.env`:
-
-- `SEOUL_RAINFALL_API_KEY`, `SEOUL_DRAINPIPE_API_KEY`: 서울시 공공 API 키
-- `SEOUL_OPEN_API_BASE_URL`, `SEOUL_RAINFALL_SERVICE`, `SEOUL_DRAINPIPE_SERVICE`: 서울시 API 기본 주소와 서비스명
-- `KMA_API_KEY`, `KMA_FORECAST_URL`, `KMA_NX`, `KMA_NY`: 기상청 단기예보 API 설정
-- `TARGET_GU_NAME`, `TARGET_DRAINPIPE_KEYWORD`, `DANGER_WATER_LEVEL_M`: 수집 대상 지역과 위험 수위 기준
-- `EXPRESS_BASE_URL`, `COLLECT_INTERVAL_SECONDS`: 스케줄러 전송 대상과 수집 주기
-- `KMA_RATE_LIMIT_COOLDOWN_SECONDS`, `KMA_REQUEST_INTERVAL_SECONDS`: 기상청 호출 제한 대응
-- `SCHEDULER_LOCK_PORT`: 스케줄러 중복 실행 방지용 localhost 잠금 포트
-- `OPENAI_API_KEY`, `OPENAI_MODEL`: 상황별 침수 알림 생성용 OpenAI 설정
-
-## 유지 중인 핵심 API
-
-Express:
-
-- `GET /api/health`
-- `GET /api/vworld/seoul-districts`
-- `POST /api/auth/signup`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `POST /api/predict-risk`
-- `POST /api/generate-alert`
-- `POST /api/update-live-status`
-- `GET /api/regions`
-- `GET /api/regional-status`
-- `GET /api/live-status?region=...`
-- `GET /api/risk-forecast?region=...`
-- `GET /api/route/car`
-- `GET /api/route/walk`
-- `GET /api/shelters`
-
-FastAPI:
-
-- `GET /health`
-- `POST /predict`
-- `POST /generate-alert`
-
-Spring Boot:
-
-- `GET /api/manholes`
-- `GET /api/sensors/latest`
-- `GET /api/test/swmm?rainfall=...`
-- `GET /api/geo-update`
+LF/CRLF 안내와 Vite 청크 크기 경고는 별도 오류가 없는 한 빌드 실패가 아닙니다.

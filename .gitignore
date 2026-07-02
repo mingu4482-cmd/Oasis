@@ -13,3 +13,5 @@ venv/
 ai-server/venv/
 __pycache__/
 *.pyc
+ai-server/data/latest-regional-status.json
+ai-server/data/latest-regional-status.json.tmp

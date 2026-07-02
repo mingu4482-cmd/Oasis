@@ -18,6 +18,7 @@ import {
 import { EXTERNAL_SENSOR_API_BASE_URL } from "../../shared/api/externalApi";
 import {
   REGION_COORDINATES,
+  SEOUL_DISTRICT_COORDINATES,
   findRegionCoordinate,
 } from "../../shared/constants/regionCoordinates";
 import { useDashboardStore } from "../../shared/store/dashboardStore";
@@ -52,9 +53,9 @@ const toRiskLabel = (status?: LiveStatusResponse): RiskLabel => {
   }
 
   const score = status?.riskScore ?? 0;
-  if (score >= 80) return "DANGER";
-  if (score >= 60) return "WARNING";
-  if (score >= 40) return "CAUTION";
+  if (score >= 75) return "DANGER";
+  if (score >= 50) return "WARNING";
+  if (score >= 25) return "CAUTION";
   return "SAFE";
 };
 
@@ -72,7 +73,7 @@ function clampToSeoul(map: any) {
   }
 }
 
-interface Manhole {
+export interface Manhole {
   locationId: number;
   name: string;
   latitude: number;
@@ -132,9 +133,18 @@ const isWithinSeoulBounds = (latitude: number, longitude: number) =>
   longitude >= SEOUL_BOUNDS.sw.lng &&
   longitude <= SEOUL_BOUNDS.ne.lng;
 
+export const findClosestDistrictName = (latitude: number, longitude: number) =>
+  SEOUL_DISTRICT_COORDINATES.reduce((closest, district) => {
+    const distance = calcDistKm(latitude, longitude, district.lat, district.lng);
+    return distance < closest.distance ? { name: district.name, distance } : closest;
+  }, { name: "", distance: Number.POSITIVE_INFINITY }).name;
+
 interface RegionRiskMapPanelProps {
   className?: string;
   height?: string;
+  selectedRegions?: string[];
+  showOnlySelectedRegions?: boolean;
+  regionRiskOverrides?: Record<string, { riskScore: number; riskLabel: RiskLabel }>;
   mapControls?: ReactNode;
   layerVisibility?: {
     regionalRisk: boolean;
@@ -157,7 +167,7 @@ function useRegionalStatus(enabled: boolean) {
     queryFn: fetchRegionalStatus,
     enabled: enabled,
     staleTime: 30_000,
-    refetchInterval: 30_000,
+    refetchInterval: (query) => query.state.data?.hasData ? 30_000 : 2_000,
   });
 }
 
@@ -170,25 +180,24 @@ function useSeoulDistrictBoundaries() {
   });
 }
 
+export async function fetchExternalManholes(): Promise<Manhole[]> {
+  const response = await fetch(`${EXTERNAL_SENSOR_API_BASE_URL}/api/manholes`);
+  if (!response.ok) throw new Error(SENSOR_API_ERROR_MESSAGE);
+  const data = (await response.json()) as Manhole[];
+  return data.filter(
+    (manhole) =>
+      typeof manhole.latitude === "number" &&
+      typeof manhole.longitude === "number" &&
+      manhole.latitude !== 0 &&
+      manhole.longitude !== 0 &&
+      isWithinSeoulBounds(manhole.latitude, manhole.longitude),
+  );
+}
+
 function useManholes(enabled: boolean) {
   return useQuery({
     queryKey: ["external-manholes"],
-    queryFn: async () => {
-      const response = await fetch(
-        `${EXTERNAL_SENSOR_API_BASE_URL}/api/manholes`,
-      );
-      if (!response.ok) throw new Error(SENSOR_API_ERROR_MESSAGE);
-      const data = (await response.json()) as Manhole[];
-
-      return data.filter(
-        (manhole) =>
-          typeof manhole.latitude === "number" &&
-          typeof manhole.longitude === "number" &&
-          manhole.latitude !== 0 &&
-          manhole.longitude !== 0 &&
-          isWithinSeoulBounds(manhole.latitude, manhole.longitude),
-      );
-    },
+    queryFn: fetchExternalManholes,
     enabled,
     staleTime: 30_000,
     refetchInterval: enabled ? 60_000 : false,
@@ -197,7 +206,7 @@ function useManholes(enabled: boolean) {
 
 const getManholeColor = (waterLevel: number) => {
   if (waterLevel >= 90) return "#dc2626";
-  if (waterLevel >= 60) return "#f97316";
+  if (waterLevel >= 60) return "#dc2626";
   if (waterLevel >= 30) return "#eab308";
   return "#16a34a";
 };
@@ -242,8 +251,12 @@ function RegionRiskMapContent({
   isKakaoReady,
   layerVisibility,
   mapControls,
+  selectedRegions,
+  showOnlySelectedRegions = false,
+  regionRiskOverrides,
 }: RegionRiskMapPanelProps & { isKakaoReady: boolean }) {
-  const selectedRegion = useDashboardStore((state) => state.selectedRegion);
+  const storeSelectedRegion = useDashboardStore((state) => state.selectedRegion);
+  const selectedRegion = selectedRegions?.[0] ?? storeSelectedRegion;
   const setSelectedRegion = useDashboardStore(
     (state) => state.setSelectedRegion,
   );
@@ -299,8 +312,21 @@ function RegionRiskMapContent({
 
   const regionItems = useMemo(
     () =>
-      REGION_COORDINATES.map((coordinate) => {
-        const status = regionalStatus?.regionStatusMap?.[coordinate.name];
+      (showOnlySelectedRegions && selectedRegions
+        ? SEOUL_DISTRICT_COORDINATES.filter((coordinate) => selectedRegions.includes(coordinate.name))
+        : REGION_COORDINATES
+      ).map((coordinate) => {
+        const override = regionRiskOverrides?.[coordinate.name];
+        const liveStatus = regionalStatus?.regionStatusMap?.[coordinate.name];
+        const status = override
+          ? {
+              ...liveStatus,
+              hasData: true,
+              dataStatus: "REALTIME" as const,
+              riskScore: override.riskScore,
+              riskLabel: override.riskLabel,
+            }
+          : liveStatus;
         const riskLabel = toRiskLabel(status);
         return {
           ...coordinate,
@@ -319,33 +345,43 @@ function RegionRiskMapContent({
               : RISK_MARKER_COLOR[riskLabel],
         };
       }),
-    [districtBoundaries, districtBoundaryMap, regionalStatus],
+    [
+      districtBoundaries,
+      districtBoundaryMap,
+      regionRiskOverrides,
+      regionalStatus,
+      selectedRegions,
+      showOnlySelectedRegions,
+    ],
   );
 
   const selectedRegionCenter = findRegionCoordinate(selectedRegion);
   const center = selectedRegionCenter;
+  const filterRegionNames = selectedRegions ?? [selectedRegion];
   const selectedBoundaryPaths = useMemo(
-    () =>
-      districtBoundaryMap.get(selectedRegion) ??
-      findBoundaryPathsByCenter(districtBoundaries, selectedRegionCenter),
+    () => filterRegionNames.flatMap((regionName) => {
+      const regionCenter = findRegionCoordinate(regionName);
+      return districtBoundaryMap.get(regionName) ??
+        findBoundaryPathsByCenter(districtBoundaries, regionCenter);
+    }),
     [
       districtBoundaries,
       districtBoundaryMap,
-      selectedRegion,
-      selectedRegionCenter,
+      filterRegionNames,
     ],
+  );
+  const selectedRegionCenters = useMemo(
+    () => filterRegionNames.map(findRegionCoordinate),
+    [filterRegionNames],
   );
   const visibleManholes = useMemo(() => {
     if (!layers.waterLevel) return [];
+    if (selectedRegions && selectedRegions.length === 0) return [];
     if (!selectedBoundaryPaths?.length) {
       return manholes.filter(
-        (manhole) =>
-          calcDistKm(
-            selectedRegionCenter.lat,
-            selectedRegionCenter.lng,
-            manhole.latitude,
-            manhole.longitude,
-          ) <= SELECTED_REGION_LAYER_RADIUS_KM,
+        (manhole) => filterRegionNames.includes(
+          findClosestDistrictName(manhole.latitude, manhole.longitude),
+        ),
       );
     }
 
@@ -359,8 +395,9 @@ function RegionRiskMapContent({
     layers.waterLevel,
     manholes,
     selectedBoundaryPaths,
-    selectedRegionCenter.lat,
-    selectedRegionCenter.lng,
+    selectedRegionCenters,
+    selectedRegions,
+    filterRegionNames,
   ]);
   const selectedManhole = layers.waterLevel
     ? (visibleManholes.find(

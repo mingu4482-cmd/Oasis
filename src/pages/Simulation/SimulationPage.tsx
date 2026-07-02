@@ -1,7 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, Square, CloudRain, BellRing, ChevronDown } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
-import { RegionRiskMapPanel } from '../../features/kakao-map/RegionRiskMapPanel';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  RegionRiskMapPanel,
+  fetchExternalManholes,
+  findClosestDistrictName,
+  type Manhole,
+} from '../../features/kakao-map/RegionRiskMapPanel';
+import { fetchRiskPrediction, type RiskLabel } from '../../shared/api/aiApi';
 
 // 💡 서울 25개 구 전체 중심 좌표 (가나다순 정렬됨)
 const REGION_CENTERS: Record<string, { lat: number; lng: number }> = {
@@ -35,16 +41,13 @@ const REGION_CENTERS: Record<string, { lat: number; lng: number }> = {
 // 가나다순으로 구 이름 배열 만들기
 const DISTRICT_LIST = Object.keys(REGION_CENTERS).sort();
 
-function calcDistKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function isSeoul(lat: number, lng: number) {
-  return lat >= 37.41 && lat <= 37.72 && lng >= 126.73 && lng <= 127.19;
+function getRegionMaxLevels(manholes: Manhole[], regions: string[]) {
+  const levels = Object.fromEntries(regions.map((region) => [region, 0])) as Record<string, number>;
+  manholes.forEach((manhole) => {
+    const region = findClosestDistrictName(manhole.latitude, manhole.longitude);
+    if (region in levels) levels[region] = Math.max(levels[region], manhole.waterLevel);
+  });
+  return Object.fromEntries(Object.entries(levels).map(([region, level]) => [region, Number(level.toFixed(1))]));
 }
 
 export function SimulationPage() {
@@ -57,11 +60,54 @@ export function SimulationPage() {
   const [elapsedTime, setElapsedTime] = useState(0); 
   const [isSimulating, setIsSimulating] = useState(false);
   const [waterLevel, setWaterLevel] = useState(25);
+  const [regionWaterLevels, setRegionWaterLevels] = useState<Record<string, number>>({});
   
   const [recentAlarms, setRecentAlarms] = useState<string[]>([]);
   const alarmedManholesRef = useRef<Set<number>>(new Set());
 
   const queryClient = useQueryClient();
+  const manholesQuery = useQuery({
+    queryKey: ['external-manholes'],
+    queryFn: fetchExternalManholes,
+    staleTime: 30_000,
+  });
+  const simulatedRiseRate = isSimulating && elapsedTime < duration
+    ? Number((((rainfall / 40) + 0.75) / 100).toFixed(3))
+    : 0;
+  const forecastHours = Math.max(0, Math.min(3, duration - elapsedTime));
+  const simulationRiskQueries = useQueries({
+    queries: targetRegions.map((region) => ({
+      queryKey: ['simulation-risk', region, rainfall, duration, elapsedTime, regionWaterLevels[region] ?? 0],
+      queryFn: () => fetchRiskPrediction({
+        current_level: regionWaterLevels[region] ?? 0,
+        level_velocity: simulatedRiseRate,
+        current_rainfall: rainfall,
+        forecast_rainfall: rainfall * Math.min(1, forecastHours),
+      }),
+      staleTime: 1_000,
+    })),
+  });
+  const simulationRegionRiskOverrides = Object.fromEntries(
+    targetRegions.flatMap((region, index) => {
+      const prediction = simulationRiskQueries[index]?.data;
+      return prediction ? [[region, {
+        riskScore: prediction.riskScore ?? 0,
+        riskLabel: prediction.riskLabel,
+      }]] : [];
+    }),
+  );
+  const simulationRisk = simulationRiskQueries
+    .map((query, index) => ({ region: targetRegions[index], prediction: query.data }))
+    .filter((item) => item.prediction)
+    .sort((a, b) => (b.prediction?.riskScore ?? 0) - (a.prediction?.riskScore ?? 0))[0];
+  const simulationRiskError = simulationRiskQueries.some((query) => query.isError);
+
+  const riskLabelText: Record<RiskLabel, string> = {
+    SAFE: '안전',
+    CAUTION: '관심',
+    WARNING: '경계',
+    DANGER: '위험',
+  };
 
   const triggerExternalAlarm = (manholeName: string, level: number) => {
     const alarmMessage = `[침수 경고] ${manholeName} 수위 ${level.toFixed(1)}% 돌파!`;
@@ -99,6 +145,13 @@ export function SimulationPage() {
   }, [targetRegions]);
 
   useEffect(() => {
+    if (isSimulating || !manholesQuery.data) return;
+    const levels = getRegionMaxLevels(manholesQuery.data, targetRegions);
+    setRegionWaterLevels(levels);
+    setWaterLevel(Math.max(0, ...Object.values(levels)));
+  }, [isSimulating, manholesQuery.data, targetRegions]);
+
+  useEffect(() => {
     let interval: NodeJS.Timeout;
 
     if (isSimulating) {
@@ -109,27 +162,18 @@ export function SimulationPage() {
           queryClient.setQueryData(["external-manholes"], (oldData: any[]) => {
             if (!oldData || oldData.length === 0) return oldData;
             
-            let currentMaxLevel = 0;
-            // 💡 선택된 모든 구역의 중심 좌표를 가져옴
-            const activeCenters = targetRegions.map(r => REGION_CENTERS[r]);
-
             const newData = oldData.map((manhole) => {
-              if (!isSeoul(manhole.latitude, manhole.longitude)) return manhole;
-
-              // 💡 다중 필터링: 맨홀이 '선택된 구역들' 중 하나라도 반경 5km 이내에 있는지 확인
-              const isNearAnyTarget = activeCenters.some(center => {
-                const dist = calcDistKm(center.lat, center.lng, manhole.latitude, manhole.longitude);
-                return dist <= 5;
-              });
-
-              if (isNearAnyTarget) {
+              const region = findClosestDistrictName(manhole.latitude, manhole.longitude);
+              if (targetRegions.includes(region)) {
                 let nextLevel = manhole.waterLevel;
                 
                 if (prevTime < duration) {
-                  const increase = (rainfall / 40) + (Math.random() * 1.5);
+                  const manholeSensitivity = 0.65 + (manhole.locationId % 11) * 0.055;
+                  const increase = (rainfall / 40) * manholeSensitivity;
                   nextLevel = Math.min(manhole.waterLevel + increase, 100);
                 } else {
-                  nextLevel = Math.max(manhole.waterLevel - (Math.random() * 3), 0);
+                  const drainageRate = 1 + (manhole.locationId % 7) * 0.25;
+                  nextLevel = Math.max(manhole.waterLevel - drainageRate, 0);
                 }
                 
                 if (nextLevel >= 90 && !alarmedManholesRef.current.has(manhole.locationId)) {
@@ -137,14 +181,14 @@ export function SimulationPage() {
                   triggerExternalAlarm(manhole.name, nextLevel);
                 }
 
-                if (nextLevel > currentMaxLevel) currentMaxLevel = nextLevel;
                 return { ...manhole, waterLevel: nextLevel };
               }
               return manhole;
             });
 
-            const formattedMax = Number(currentMaxLevel.toFixed(1));
-            setWaterLevel(formattedMax);
+            const nextRegionLevels = getRegionMaxLevels(newData, targetRegions);
+            setRegionWaterLevels(nextRegionLevels);
+            setWaterLevel(Math.max(0, ...Object.values(nextRegionLevels)));
 
             return newData;
           });
@@ -156,9 +200,6 @@ export function SimulationPage() {
 
     return () => clearInterval(interval);
   }, [isSimulating, rainfall, duration, targetRegions, queryClient]);
-
-  const currentManholes = queryClient.getQueryData(["external-manholes"]) || [];
-  const seoulManholes = (currentManholes as any[]).filter(m => isSeoul(m.latitude, m.longitude));
 
   // 드롭다운 버튼에 표시할 텍스트 로직
   const getDropdownText = () => {
@@ -173,9 +214,12 @@ export function SimulationPage() {
       
       <div className="map-area" style={{ flex: 2, position: 'relative', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
          <RegionRiskMapPanel 
-  height="100%" 
-  layerVisibility={{ regionalRisk: false, waterLevel: true, rainfall: false, safeRoute: false }} 
-/>
+           height="100%"
+           selectedRegions={targetRegions}
+           showOnlySelectedRegions
+           regionRiskOverrides={simulationRegionRiskOverrides}
+           layerVisibility={{ regionalRisk: true, waterLevel: true, rainfall: false, safeRoute: false }}
+         />
 
          {isSimulating && (
             <div style={{ position: 'absolute', top: '20px', left: '20px', background: 'rgba(255,255,255,0.95)', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 10 }}>
@@ -295,6 +339,36 @@ export function SimulationPage() {
               {waterLevel}%
             </span>
           </div>
+        </div>
+
+        <div className="panel simulation-ai-risk-card" style={{ background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+            <div>
+              <span style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: 700 }}>시뮬레이션 기반</span>
+              <h3 style={{ margin: '4px 0 0', fontSize: '1.1rem', color: '#334155' }}>AI 침수 위험도</h3>
+            </div>
+            <strong className={`simulation-risk-badge simulation-risk-${simulationRisk?.prediction?.riskLabel?.toLowerCase() ?? 'safe'}`}>
+              {simulationRisk?.prediction ? riskLabelText[simulationRisk.prediction.riskLabel] : '계산 중'}
+            </strong>
+          </div>
+          {targetRegions.length === 0 ? (
+            <p style={{ margin: '18px 0 0', color: '#dc2626' }}>분석할 구역을 선택하세요.</p>
+          ) : simulationRiskError ? (
+            <p style={{ margin: '18px 0 0', color: '#dc2626' }}>AI 위험도 서버에 연결할 수 없습니다.</p>
+          ) : (
+            <>
+              <div className="simulation-risk-score">
+                <strong>{simulationRisk?.prediction?.riskScore ?? 0}</strong><span>/ 100</span>
+              </div>
+              <div className="simulation-risk-factors">
+                <span>최고 위험 {simulationRisk?.region ?? getDropdownText()}</span>
+                <span>강우 {rainfall}mm/h</span>
+                <span>최대 수위 {waterLevel}%</span>
+                <span>예상 강우 {rainfall * forecastHours}mm</span>
+              </div>
+              <p className="simulation-risk-notice">시뮬레이션 입력값에 따른 OASIS 참고 위험도이며 공식 재난 경보가 아닙니다.</p>
+            </>
+          )}
         </div>
       </aside>
     </div>

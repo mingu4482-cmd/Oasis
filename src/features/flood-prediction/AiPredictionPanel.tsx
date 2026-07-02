@@ -22,9 +22,9 @@ const DATA_STATUS_LABEL: Record<string, string> = {
 export const liveStatusQueryKey = (region: string) => ['live-status', region] as const;
 
 const getRiskLabel = (score: number): RiskLabel => {
-  if (score >= 80) return 'DANGER';
-  if (score >= 60) return 'WARNING';
-  if (score >= 40) return 'CAUTION';
+  if (score >= 75) return 'DANGER';
+  if (score >= 50) return 'WARNING';
+  if (score >= 25) return 'CAUTION';
   return 'SAFE';
 };
 
@@ -93,7 +93,7 @@ export function AiPredictionPanel({ children }: AiPredictionPanelProps) {
     new Set([...(liveData?.warnings ?? []), liveData?.fallbackReason].filter(Boolean) as string[]),
   );
   const monitoringMetrics = [
-    { label: '강우량', value: liveData?.rainfall, unit: 'mm', percent: toMetricPercent(liveData?.rainfall, 80) },
+    { label: '10분 강우량', value: liveData?.rainfall, unit: 'mm', percent: toMetricPercent(liveData?.rainfall, 12) },
     { label: '하수관로 수위', value: liveData?.waterLevel, unit: '%', percent: toMetricPercent(liveData?.waterLevel, 100) },
     { label: '배수 상태', value: liveData?.drainageLevel, unit: '%', percent: toMetricPercent(liveData?.drainageLevel, 100) },
     { label: '상승 속도', value: liveData?.waterLevelRiseRate, unit: 'm/h', percent: toMetricPercent(liveData?.waterLevelRiseRate, 2) },

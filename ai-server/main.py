@@ -1,8 +1,6 @@
 import logging
 import sys
 from pathlib import Path
-
-import joblib
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -24,7 +22,6 @@ logger = logging.getLogger("oasis-ai-server")
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
-MODEL_PATH = BASE_DIR / "models" / "risk_model.pkl"
 
 app = FastAPI(title="OASIS AI Risk Prediction Server")
 
@@ -42,37 +39,18 @@ app.add_middleware(
 )
 
 
-def load_risk_model():
-    logger.info("Loading risk model from: %s", MODEL_PATH)
-
-    if not MODEL_PATH.exists():
-        logger.warning("Risk model file does not exist. Fallback scoring will be used.")
-        return None
-
-    try:
-        loaded_model = joblib.load(MODEL_PATH)
-        logger.info("Risk model loaded successfully.")
-        return loaded_model
-    except Exception as error:
-        logger.exception("Failed to load risk model. Fallback scoring will be used: %s", error)
-        return None
-
-
-model = load_risk_model()
-
-
 @app.get("/health")
 def health_check():
     return {
         "ok": True,
-        "modelLoaded": model is not None,
-        "fallbackEnabled": True,
+        "calculationMethod": "OASIS-RiskRule v2.0",
+        "officialWarning": False,
     }
 
 
 @app.post("/predict")
 def predict_risk(sensor_data: SensorData):
-    prediction = predict_sensor_risk(sensor_data, model)
+    prediction = predict_sensor_risk(sensor_data)
     return prediction.model_dump()
 
 

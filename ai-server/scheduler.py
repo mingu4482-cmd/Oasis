@@ -5,6 +5,7 @@ import re
 import socket
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -55,8 +56,10 @@ TARGET_GU_NAME = os.getenv("TARGET_GU_NAME", "강남구")
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
 KMA_RATE_LIMIT_COOLDOWN_SECONDS = int(os.getenv("KMA_RATE_LIMIT_COOLDOWN_SECONDS", "900"))
 KMA_REQUEST_INTERVAL_SECONDS = float(os.getenv("KMA_REQUEST_INTERVAL_SECONDS", "1.2"))
+KMA_MAX_WORKERS = max(1, int(os.getenv("KMA_MAX_WORKERS", "4")))
 SCHEDULER_LOCK_PORT = int(os.getenv("SCHEDULER_LOCK_PORT", "49171"))
 DANGER_WATER_LEVEL_M = float(os.getenv("DANGER_WATER_LEVEL_M", "1.0"))
+DRAINPIPE_MAX_WORKERS = max(1, int(os.getenv("DRAINPIPE_MAX_WORKERS", "25")))
 
 REGION_GRID = {
     "강남구": {"nx": 61, "ny": 125},
@@ -109,10 +112,11 @@ SCHEDULER_LOCK_SOCKET: socket.socket | None = None
 def acquire_scheduler_lock() -> bool:
     global SCHEDULER_LOCK_SOCKET
 
-    lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # UDP has no TCP TIME_WAIT state, so a scheduler that was just stopped can
+    # restart immediately without being mistaken for a still-running process.
+    lock_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         lock_socket.bind(("127.0.0.1", SCHEDULER_LOCK_PORT))
-        lock_socket.listen(1)
     except OSError:
         lock_socket.close()
         return False
@@ -273,20 +277,26 @@ def fetch_drainpipe_rows() -> list[dict[str, Any]]:
     end_time = end_dt.strftime("%Y%m%d%H")
     all_rows: list[dict[str, Any]] = []
 
-    for code in range(1, 26):
+    def fetch_district(code: int) -> tuple[str, list[dict[str, Any]]]:
         se_cd = f"{code:02d}"
         path_suffix = f"1/500/{se_cd}/{start_time}/{end_time}"
-        try:
-            payload = request_seoul_api(
-                f"Seoul drainpipe API SE_CD {se_cd}",
-                SEOUL_DRAINPIPE_API_KEY,
-                SEOUL_DRAINPIPE_SERVICE,
-                path_suffix,
-            )
-            rows = extract_service_rows(payload, SEOUL_DRAINPIPE_SERVICE)
-            all_rows.extend(rows)
-        except Exception as error:
-            logger.warning("%s drainpipe SE_CD %s failed. error=%s", LOG_PREFIX, se_cd, error)
+        payload = request_seoul_api(
+            f"Seoul drainpipe API SE_CD {se_cd}",
+            SEOUL_DRAINPIPE_API_KEY,
+            SEOUL_DRAINPIPE_SERVICE,
+            path_suffix,
+        )
+        return se_cd, extract_service_rows(payload, SEOUL_DRAINPIPE_SERVICE)
+
+    with ThreadPoolExecutor(max_workers=DRAINPIPE_MAX_WORKERS) as executor:
+        futures = {executor.submit(fetch_district, code): code for code in range(1, 26)}
+        for future in as_completed(futures):
+            se_cd = f"{futures[future]:02d}"
+            try:
+                _, rows = future.result()
+                all_rows.extend(rows)
+            except Exception as error:
+                logger.warning("%s drainpipe SE_CD %s failed. error=%s", LOG_PREFIX, se_cd, error)
 
     if not all_rows:
         raise RuntimeError("Seoul drainpipe API row is empty for all SE_CD")
@@ -485,19 +495,22 @@ def build_forecast_map() -> tuple[dict[str, list[float]], set[str]]:
     forecast_by_region: dict[str, list[float]] = {}
     failed_regions: set[str] = set()
 
-    requested_grid_count = 0
-    for region, grid in REGION_GRID.items():
-        grid_key = (grid["nx"], grid["ny"])
-        if grid_key not in forecast_by_grid and grid_key not in failed_grids:
-            if requested_grid_count > 0:
-                time.sleep(KMA_REQUEST_INTERVAL_SECONDS)
+    grid_keys = {(grid["nx"], grid["ny"]) for grid in REGION_GRID.values()}
+    with ThreadPoolExecutor(max_workers=KMA_MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(fetch_kma_forecast_rainfall, *grid_key): grid_key
+            for grid_key in grid_keys
+        }
+        for future in as_completed(futures):
+            grid_key = futures[future]
             try:
-                forecast_by_grid[grid_key] = fetch_kma_forecast_rainfall(*grid_key)
+                forecast_by_grid[grid_key] = future.result()
             except Exception as error:
                 logger.warning("%s KMA forecast API failed. nx=%s ny=%s error=%s", LOG_PREFIX, *grid_key, error)
                 failed_grids.add(grid_key)
-            requested_grid_count += 1
 
+    for region, grid in REGION_GRID.items():
+        grid_key = (grid["nx"], grid["ny"])
         if grid_key in forecast_by_grid:
             forecast_by_region[region] = forecast_by_grid[grid_key]
         else:
@@ -531,6 +544,7 @@ def build_payload_from_input(payload: dict[str, Any], source: str) -> dict[str, 
     prediction = build_risk_forecast(forecast_input)
     return {
         "rainfall": forecast_input.rainfall,
+        "rainfallUnit": "mm/10min",
         "waterLevel": forecast_input.waterLevel,
         "drainageLevel": forecast_input.drainageLevel,
         "waterLevelRiseRate": forecast_input.waterLevelRiseRate,
@@ -603,6 +617,9 @@ def build_region_status(
         source,
     )
 
+    # Confidence represents source completeness, not how high the risk score is.
+    payload["confidence"] = {3: 0.95, 2: 0.65, 1: 0.40, 0: 0.0}[success_count]
+
     if data_status == "UNAVAILABLE":
         payload["riskScore"] = 0
         payload["riskLabel"] = "SAFE"
@@ -610,7 +627,7 @@ def build_region_status(
         payload["message"] = "해당 지역은 현재 실시간 데이터가 부족하여 AI 위험도 분석을 제공할 수 없습니다."
         payload["points"] = []
     elif data_status == "FALLBACK":
-        payload["confidence"] = min(payload["confidence"], 0.35)
+        payload["confidence"] = 0.0
 
     grid = REGION_GRID[region]
     return {

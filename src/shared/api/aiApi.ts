@@ -57,6 +57,7 @@ export interface LiveStatusResponse {
   hasData: boolean;
   targetAreaName?: string;
   rainfall?: number;
+  rainfallUnit?: string;
   waterLevel?: number;
   drainageLevel?: number;
   waterLevelRiseRate?: number;
