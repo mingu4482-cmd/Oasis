@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Play, Square, CloudRain, BellRing, ChevronDown } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RegionRiskMapPanel } from '../../features/kakao-map/RegionRiskMapPanel';
+import { useDashboardStore } from '../../shared/store/dashboardStore';
 
 // 💡 서울 25개 구 전체 중심 좌표 (가나다순 정렬됨)
 const REGION_CENTERS: Record<string, { lat: number; lng: number }> = {
@@ -62,10 +63,21 @@ export function SimulationPage() {
   const alarmedManholesRef = useRef<Set<number>>(new Set());
 
   const queryClient = useQueryClient();
+  const addSimulationSensorLog = useDashboardStore((state) => state.addSimulationSensorLog);
+  const clearSimulationSensorLogs = useDashboardStore((state) => state.clearSimulationSensorLogs);
 
-  const triggerExternalAlarm = (manholeName: string, level: number) => {
+  const triggerExternalAlarm = (manholeName: string, level: number, region: string) => {
     const alarmMessage = `[침수 경고] ${manholeName} 수위 ${level.toFixed(1)}% 돌파!`;
     setRecentAlarms((prev) => [alarmMessage, ...prev].slice(0, 3));
+    addSimulationSensorLog({
+      id: `${region}-${manholeName}-${Date.now()}`,
+      region,
+      sensorName: manholeName,
+      waterLevel: Number(level.toFixed(1)),
+      rainfall,
+      detectedAt: new Date().toISOString(),
+      message: alarmMessage,
+    });
   };
 
   const handleReset = () => {
@@ -74,6 +86,7 @@ export function SimulationPage() {
     setElapsedTime(0); 
     setRecentAlarms([]);
     alarmedManholesRef.current.clear();
+    targetRegions.forEach((region) => clearSimulationSensorLogs(region));
     queryClient.invalidateQueries({ queryKey: ["external-manholes"] });
   };
 
@@ -134,7 +147,11 @@ export function SimulationPage() {
                 
                 if (nextLevel >= 90 && !alarmedManholesRef.current.has(manhole.locationId)) {
                   alarmedManholesRef.current.add(manhole.locationId);
-                  triggerExternalAlarm(manhole.name, nextLevel);
+                  const detectedRegion = targetRegions.find((region) => {
+                    const center = REGION_CENTERS[region];
+                    return calcDistKm(center.lat, center.lng, manhole.latitude, manhole.longitude) <= 5;
+                  }) ?? targetRegions[0] ?? '강남구';
+                  triggerExternalAlarm(manhole.name, nextLevel, detectedRegion);
                 }
 
                 if (nextLevel > currentMaxLevel) currentMaxLevel = nextLevel;
