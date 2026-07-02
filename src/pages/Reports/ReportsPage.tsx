@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, FileCheck2, Loader2, X } from 'lucide-react';
 import {
   createIncidentReport,
+  getAlertHistory,
+  McpAlertHistoryItem,
   McpReport,
 } from '../../shared/api/mcpApi';
 import { fetchLiveStatus } from '../../shared/api/aiApi';
@@ -20,15 +22,36 @@ export function ReportsPage() {
   const [loadingIndex, setLoadingIndex] = useState<number | null>(null);
   const [report, setReport] = useState<McpReport | null>(null);
   const [error, setError] = useState('');
+  const [alertHistory, setAlertHistory] = useState<McpAlertHistoryItem[]>([]);
+
+  useEffect(() => {
+    getAlertHistory(selectedDistrict).then(setAlertHistory).catch(() => setAlertHistory([]));
+  }, [selectedDistrict]);
 
   const generate = async (index: number) => {
-    if (index > 2 || loadingIndex !== null) return;
+    if (index > 3 || loadingIndex !== null) return;
     setLoadingIndex(index);
     setError('');
     try {
       const districtLogs = simulationSensorLogs.filter((log) => log.region === selectedDistrict);
+      let citizenAlerts = alertHistory;
       let status: Record<string, unknown>;
-      if (index === 2) {
+      if (index === 3) {
+        const alerts = await getAlertHistory(selectedDistrict);
+        if (alerts.length === 0) throw new Error(`${selectedDistrict} 시민 알림 발송 이력이 없습니다.`);
+        setAlertHistory(alerts);
+        citizenAlerts = alerts;
+        const latest = alerts[0];
+        status = {
+          location_id: selectedDistrict,
+          location_name: selectedDistrict,
+          risk_level: '알림 발송 이력',
+          water_level: '-', rainfall: '-', rise_rate: '-',
+          recent_change: `총 ${alerts.length}건 · 성공 ${alerts.filter((item) => item.success).length}건`,
+          data_source: 'OASIS 알림 발송 DB',
+          updated_at: latest.sent_at,
+        };
+      } else if (index === 2) {
         if (districtLogs.length === 0) throw new Error(`${selectedDistrict} 시뮬레이션 이상 로그가 없습니다.`);
         const latest = districtLogs[0];
         status = {
@@ -60,7 +83,9 @@ export function ReportsPage() {
       }
       setReport(await createIncidentReport({
         status,
-        checklist: index === 2
+        checklist: index === 3
+          ? citizenAlerts.map((item) => `□ [${item.channel.toUpperCase()}] ${item.success ? '성공' : '실패'} / ${item.sent_at} / ${item.message}`)
+          : index === 2
           ? districtLogs.map((log) => `□ ${log.sensorName}: 수위 ${log.waterLevel}% / 강우 ${log.rainfall}mm/h / ${new Date(log.detectedAt).toLocaleString('ko-KR')}`)
           : index === 1
           ? ['□ 배수펌프 가동', '□ 도로 통제', '□ 현장 순찰', '□ 유관기관 연락']
@@ -101,12 +126,12 @@ export function ReportsPage() {
         {error && <div style={{ marginBottom: 12, padding: 10, color: '#991b1b', background: '#fef2f2', borderRadius: 8 }}>{error}</div>}
         <div className="report-grid">
           {reports.map((report, index) => (
-            <article key={report} className="report-item" role={index < 3 ? 'button' : undefined} tabIndex={index < 3 ? 0 : undefined}
+            <article key={report} className="report-item" role="button" tabIndex={0}
               onClick={() => generate(index)} onKeyDown={(event) => event.key === 'Enter' && generate(index)}
-              style={{ cursor: index < 3 ? 'pointer' : 'not-allowed', opacity: index < 3 ? 1 : 0.6 }}>
+              style={{ cursor: 'pointer', opacity: 1 }}>
               {loadingIndex === index ? <Loader2 className="spin-icon" size={20} /> : <FileCheck2 size={20} aria-hidden="true" />}
               <strong>{report}</strong>
-              <span>{loadingIndex === index ? '생성 중...' : index === 2 ? `${simulationSensorLogs.filter((log) => log.region === selectedDistrict).length}건 수집됨 · 클릭` : index < 2 ? '생성 가능 · 클릭' : '데이터 수집 중'}</span>
+              <span>{loadingIndex === index ? '생성 중...' : index === 3 ? `${alertHistory.length}건 수집됨 · 클릭` : index === 2 ? `${simulationSensorLogs.filter((log) => log.region === selectedDistrict).length}건 수집됨 · 클릭` : '생성 가능 · 클릭'}</span>
             </article>
           ))}
         </div>

@@ -41,7 +41,7 @@ except ImportError:
     SolapiMessageService = None
     RequestMessage = None
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
 # 웹 앱의 FastAPI 서버가 이미 8000번 포트를 사용하므로 MCP는 기본적으로
 # 8001번에서 Streamable HTTP 방식으로 실행한다. MCP 클라이언트가 stdio를
@@ -74,6 +74,8 @@ PUBLIC_DATA_KEY     = os.getenv("PUBLIC_DATA_KEY")       # 공공데이터포털
 WEATHER_API_KEY     = os.getenv("WEATHER_API_KEY") or os.getenv("KMA_API_KEY")
 WEATHER_API_URL     = os.getenv("WEATHER_API_URL") or os.getenv("KMA_FORECAST_URL") or "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
 DB_PATH             = os.getenv("DB_PATH", "oasis_incidents.db")
+if not os.path.isabs(DB_PATH):
+    DB_PATH = os.path.join(os.path.dirname(__file__), DB_PATH)
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -1017,6 +1019,9 @@ def get_weather_forecast(
 @mcp.tool()
 def broadcast_emergency(
     location_id: str,
+    message: Optional[str] = None,
+    risk_level_override: Optional[str] = None,
+    location_name_override: Optional[str] = None,
     sms_numbers: Optional[list[str]] = None,
     kakao_numbers: Optional[list[str]] = None,
     slack_channel: Optional[str] = None,
@@ -1042,8 +1047,9 @@ def broadcast_emergency(
 
     # 1. 현황 조회
     status = get_current_status(location_id)
-    risk_level = status.get("risk_level", "안전")
-    location_name = status.get("location_name", location_id)
+    risk_level = risk_level_override or status.get("risk_level", "안전")
+    location_name = location_name_override or status.get("location_name", location_id)
+    status = {**status, "risk_level": risk_level, "location_name": location_name}
 
     # 2. 체크리스트 생성 (모든 역할)
     checklists = {}
@@ -1052,7 +1058,7 @@ def broadcast_emergency(
         checklists[role] = cl["checklist"]
 
     # 3. Slack 보고서 생성 및 발송
-    slack_msg = generate_response_manual(status)
+    slack_msg = f"[{risk_level}] {location_name}\n{message}" if message else generate_response_manual(status)
     slack_result = send_slack_alert(slack_msg, slack_channel)
 
     # 4. SMS 발송
@@ -1129,6 +1135,36 @@ def get_incident_history(
 
     incidents = [dict(zip(cols, row)) for row in rows]
     return {"incidents": incidents, "total": len(incidents)}
+
+
+@mcp.tool()
+def get_alert_history(
+    region: Optional[str] = None,
+    channel: Optional[str] = None,
+    limit: int = 50,
+) -> dict:
+    """Slack/SMS/카카오 시민 알림 발송 이력을 최신순으로 조회합니다."""
+    conn = sqlite3.connect(DB_PATH)
+    query = "SELECT id, incident_id, channel, message, success, sent_at FROM alert_logs WHERE 1=1"
+    params = []
+    if region:
+        query += " AND message LIKE ?"
+        params.append(f"%{region}%")
+    if channel:
+        query += " AND channel = ?"
+        params.append(channel)
+    query += " ORDER BY sent_at DESC LIMIT ?"
+    params.append(max(1, min(limit, 200)))
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    alerts = [
+        {
+            "id": row[0], "incident_id": row[1], "channel": row[2],
+            "message": row[3], "success": bool(row[4]), "sent_at": row[5],
+        }
+        for row in rows
+    ]
+    return {"alerts": alerts, "total": len(alerts)}
 
 
 # ── 내부 헬퍼 ──────────────────────────────────────────

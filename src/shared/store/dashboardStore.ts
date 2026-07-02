@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { DashboardState } from '../types/domain';
+import { DashboardState, Incident } from '../types/domain';
 import { mockDashboard } from '../../features/flood-prediction/mockData';
 
 interface DashboardActions {
@@ -7,6 +7,7 @@ interface DashboardActions {
   simulationSensorLogs: SimulationSensorLog[];
   addSimulationSensorLog: (log: SimulationSensorLog) => void;
   clearSimulationSensorLogs: (region?: string) => void;
+  addActiveIncident: (incident: Incident) => void;
 }
 
 export interface SimulationSensorLog {
@@ -31,5 +32,8 @@ export const useDashboardStore = create<DashboardState & DashboardActions>((set)
     simulationSensorLogs: region
       ? state.simulationSensorLogs.filter((log) => log.region !== region)
       : [],
+  })),
+  addActiveIncident: (incident) => set((state) => ({
+    activeIncidents: [incident, ...state.activeIncidents].slice(0, 20),
   })),
 }));

@@ -22,7 +22,7 @@ def _json(data: Any, status: int = 200) -> JSONResponse:
 def register_http_routes(server: Any, tools: dict[str, Any]) -> None:
     @server.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> Response:
-        return _json({"status": "ok", "service": "OASIS MCP", "tools": 15})
+        return _json({"status": "ok", "service": "OASIS MCP", "tools": 16})
 
     @server.custom_route("/reports", methods=["GET"])
     async def reports(_: Request) -> Response:
@@ -40,6 +40,18 @@ def register_http_routes(server: Any, tools: dict[str, Any]) -> None:
         ))
         return _json(result)
 
+    @server.custom_route("/api/mcp/alert-history", methods=["GET", "OPTIONS"])
+    async def alert_history(request: Request) -> Response:
+        if request.method == "OPTIONS":
+            return Response(status_code=204, headers=CORS)
+        query = request.query_params
+        result = await anyio.to_thread.run_sync(lambda: tools["get_alert_history"](
+            region=query.get("region"),
+            channel=query.get("channel"),
+            limit=int(query.get("limit", "50")),
+        ))
+        return _json(result)
+
     @server.custom_route("/api/mcp/create-incident-report", methods=["POST", "OPTIONS"])
     async def create_report(request: Request) -> Response:
         if request.method == "OPTIONS":
@@ -50,6 +62,27 @@ def register_http_routes(server: Any, tools: dict[str, Any]) -> None:
                 status=body.get("status") or {},
                 checklist=body.get("checklist"),
                 actions_taken=body.get("actions_taken"),
+            ))
+            return _json(result)
+        except Exception as exc:
+            return _json({"success": False, "message": str(exc)}, 500)
+
+    @server.custom_route("/api/mcp/broadcast-emergency", methods=["POST", "OPTIONS"])
+    async def broadcast_emergency(request: Request) -> Response:
+        if request.method == "OPTIONS":
+            return Response(status_code=204, headers=CORS)
+        try:
+            body = await request.json()
+            regions = body.get("regions") or []
+            location_name = ", ".join(regions) if isinstance(regions, list) else str(regions)
+            result = await anyio.to_thread.run_sync(lambda: tools["broadcast_emergency"](
+                location_id=location_name or "강남구",
+                message=body.get("message"),
+                risk_level_override=body.get("grade"),
+                location_name_override=location_name or None,
+                sms_numbers=body.get("sms_numbers"),
+                kakao_numbers=body.get("kakao_numbers"),
+                target_roles=body.get("target_roles") or ["현장요원", "관제센터", "시민"],
             ))
             return _json(result)
         except Exception as exc:
